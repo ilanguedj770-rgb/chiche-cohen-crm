@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { ETAPES_LABELS, ETAPES_COULEURS, TYPE_ACCIDENT_LABELS, type Dossier, type Client, type Etape, type Expertise, type Audience } from '@/lib/types'
-import { ArrowLeft, Download, Phone, Mail, Calendar, Scale, Stethoscope, Euro, ChevronRight, Plus, Save, AlertTriangle, FileText, Clock, Gavel, User, Upload, Download, Trash2, Edit2, X } from 'lucide-react'
+import { ArrowLeft, Download, Phone, Mail, Calendar, Scale, Stethoscope, Euro, ChevronRight, Plus, Save, AlertTriangle, FileText, Clock, Gavel, User, Upload, Trash2, Edit2, X } from 'lucide-react'
 import Link from 'next/link'
 import { exportDossierPDF } from '@/lib/export-pdf'
 import { useParams } from 'next/navigation'
@@ -565,7 +565,7 @@ export default function DossierDetail() {
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
                   <Stethoscope size={16} className="text-purple-500" />
-                  <span className="font-semibold capitalize">{e.type_expertise === 'judiciaire' ? 'Expertise judiciaire' : e.type_expertise === 'amiable' ? 'Expertise amiable' : e.type_expertise === 'contra_expertisse' ? 'Contre-expertise' : 'Expertise de suivi'}</span>
+                  <span className="font-semibold capitalize">{e.type === 'judiciaire' ? 'Expertise judiciaire' : e.type === 'amiable' ? 'Expertise amiable' : e.type === 'contra_expertisse' ? 'Contre-expertise' : 'Expertise de suivi'}</span>
                   {e.date_expertise && <span className="badge bg-purple-50 text-purple-700">{formatDateShort(e.date_expertise)}</span>}
                 </div>
                 <div className="flex items-center gap-2">
@@ -577,7 +577,7 @@ export default function DossierDetail() {
               </div>
               <div className="grid grid-cols-4 gap-4 mb-4">
                 <Info label="Expert" value={e.expert_nom} />
-                <Info label="Médecin conseil" value={e.medecin_conseil_victime || e.medecin_conseil_nom} />
+                <Info label="Médecin conseil" value={e.medecin_conseil_nom} />
                 <Info label="Lieu" value={e.lieu_expertise} />
                 <Info label="Date rapport" value={formatDateShort(e.date_rapport)} />
               </div>

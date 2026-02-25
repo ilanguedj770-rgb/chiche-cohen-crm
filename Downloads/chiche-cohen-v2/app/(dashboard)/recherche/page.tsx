@@ -1,5 +1,5 @@
 'use client'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, Suspense } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Search, FolderOpen, Users, Briefcase, User, ChevronRight } from 'lucide-react'
 import Link from 'next/link'
@@ -8,7 +8,7 @@ import { ETAPES_LABELS, ETAPES_COULEURS, TYPE_ACCIDENT_LABELS } from '@/lib/type
 
 type Categorie = 'tous' | 'dossiers' | 'clients' | 'apporteurs'
 
-export default function RecherchePage() {
+function RechercheContenu() {
   const searchParams = useSearchParams()
   const qInit = searchParams.get('q') || ''
   const [query, setQuery] = useState(qInit)
@@ -226,6 +226,14 @@ export default function RecherchePage() {
         </div>
       )}
     </div>
+  )
+}
+
+export default function RecherchePage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-screen"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cabinet-blue" /></div>}>
+      <RechercheContenu />
+    </Suspense>
   )
 }
 
