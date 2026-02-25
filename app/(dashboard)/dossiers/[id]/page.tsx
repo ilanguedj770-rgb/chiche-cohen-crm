@@ -288,7 +288,7 @@ export default function DossierDetail() {
           ['audiences', `Audiences (${audiences.length})`],
           ['financier', 'Financier'],
           ['notes', `Notes (${notes.length})`],
-          ['historique', 'Historique'],
+          ['historique', 'Timeline'],
           ['documents', `Documents (${documents.length})`],
         ].map(([t, label]) => (
           <button key={t} onClick={() => setTab(t as any)}
@@ -935,31 +935,14 @@ export default function DossierDetail() {
 
       {/* Onglet Historique */}
       {tab === 'historique' && (
-        <div className="space-y-3">
-          {historique.length === 0 ? (
-            <div className="card text-center py-12 text-gray-400">
-              <Clock size={40} className="mx-auto mb-3 opacity-20" />
-              <p>Aucun historique disponible</p>
-            </div>
-          ) : historique.map(h => (
-            <div key={h.id} className="flex items-center gap-4 p-3 rounded-lg border border-gray-100">
-              <div className="w-2 h-2 rounded-full bg-cabinet-blue flex-shrink-0" />
-              <div className="flex-1">
-                <div className="text-sm">
-                  {h.etape_precedente ? (
-                    <span>Passage de <span className="font-medium">{ETAPES_LABELS[h.etape_precedente as Etape] ?? h.etape_precedente}</span> → <span className="font-medium text-cabinet-blue">{ETAPES_LABELS[h.etape_nouvelle as Etape] ?? h.etape_nouvelle}</span></span>
-                  ) : (
-                    <span>Dossier créé à l'étape <span className="font-medium text-cabinet-blue">{ETAPES_LABELS[h.etape_nouvelle as Etape] ?? h.etape_nouvelle}</span></span>
-                  )}
-                </div>
-                <div className="text-xs text-gray-400 mt-0.5">
-                  {new Date(h.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                  {h.utilisateur && ` • ${h.utilisateur.prenom} ${h.utilisateur.nom}`}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
+        <TimelineDossier
+          historique={historique}
+          relances={relances}
+          audiences={audiences}
+          expertises={expertises}
+          documents={documents}
+          dossier={dossier}
+        />
       )}
       {/* Onglet Documents */}
       {tab === 'documents' && (
@@ -1060,6 +1043,153 @@ function Flag({ label, active, danger }: { label: string; active: boolean; dange
     <div className={`flex items-center justify-between px-3 py-2 rounded-lg ${active ? (danger ? 'bg-red-50' : 'bg-green-50') : 'bg-gray-50'}`}>
       <span className="text-xs text-gray-600">{label}</span>
       <span className={`text-xs font-medium ${active ? (danger ? 'text-red-600' : 'text-green-600') : 'text-gray-300'}`}>{active ? '✓ Oui' : 'Non'}</span>
+    </div>
+  )
+}
+
+
+// ─── Timeline Dossier ─────────────────────────────────────────────────────────
+
+interface TimelineEvent {
+  id: string
+  date: string
+  type: 'etape' | 'relance' | 'audience' | 'expertise' | 'document' | 'creation'
+  titre: string
+  detail?: string
+  icon: string
+  couleur: string
+  bg: string
+}
+
+function TimelineDossier({ historique, relances, audiences, expertises, documents, dossier }: {
+  historique: any[], relances: any[], audiences: any[], expertises: any[], documents: any[], dossier: any
+}) {
+  // Construire la liste unifiée d'événements
+  const events: TimelineEvent[] = []
+
+  // Création du dossier
+  if (dossier?.created_at) {
+    events.push({
+      id: 'creation', date: dossier.created_at, type: 'creation',
+      titre: 'Dossier ouvert', detail: `Étape initiale : ${ETAPES_LABELS[dossier.etape as Etape] ?? dossier.etape}`,
+      icon: '📁', couleur: 'text-cabinet-blue', bg: 'bg-blue-50',
+    })
+  }
+
+  // Changements d'étape
+  historique.forEach(h => {
+    events.push({
+      id: `etape-${h.id}`, date: h.created_at, type: 'etape',
+      titre: h.etape_precedente
+        ? `${ETAPES_LABELS[h.etape_precedente as Etape] ?? h.etape_precedente} → ${ETAPES_LABELS[h.etape_nouvelle as Etape] ?? h.etape_nouvelle}`
+        : `Dossier à l'étape ${ETAPES_LABELS[h.etape_nouvelle as Etape] ?? h.etape_nouvelle}`,
+      detail: h.utilisateur ? `${h.utilisateur.prenom} ${h.utilisateur.nom}` : undefined,
+      icon: '🔄', couleur: 'text-indigo-700', bg: 'bg-indigo-50',
+    })
+  })
+
+  // Relances
+  const RELANCE_TYPE_ICONS: Record<string, string> = { telephone: '📞', whatsapp: '💬', email: '📧', courrier: '✉️', sms: '📱' }
+  const RELANCE_STATUT_COLORS: Record<string, string> = { effectuee: 'text-green-700', en_attente: 'text-orange-700', annulee: 'text-gray-500' }
+  const RELANCE_STATUT_BG: Record<string, string> = { effectuee: 'bg-green-50', en_attente: 'bg-orange-50', annulee: 'bg-gray-50' }
+  relances.forEach(r => {
+    events.push({
+      id: `relance-${r.id}`, date: r.created_at, type: 'relance',
+      titre: `Relance ${r.type || ''} — ${r.statut || ''}`,
+      detail: r.motif || r.notes,
+      icon: RELANCE_TYPE_ICONS[r.type] || '📋',
+      couleur: RELANCE_STATUT_COLORS[r.statut] || 'text-gray-600',
+      bg: RELANCE_STATUT_BG[r.statut] || 'bg-gray-50',
+    })
+  })
+
+  // Audiences
+  audiences.forEach(a => {
+    const date = a.date_audience || a.created_at
+    events.push({
+      id: `aud-${a.id}`, date, type: 'audience',
+      titre: `Audience — ${(a.nature || '').replace(/_/g, ' ')}`,
+      detail: [a.tribunal, a.resultat].filter(Boolean).join(' • ') || undefined,
+      icon: '⚖️', couleur: 'text-blue-700', bg: 'bg-blue-50',
+    })
+  })
+
+  // Expertises
+  expertises.forEach(e => {
+    const date = e.date_expertise || e.created_at
+    events.push({
+      id: `exp-${e.id}`, date, type: 'expertise',
+      titre: `Expertise — ${e.type || ''}`,
+      detail: [e.expert_nom, e.lieu_expertise].filter(Boolean).join(' • ') || undefined,
+      icon: '🩺', couleur: 'text-purple-700', bg: 'bg-purple-50',
+    })
+  })
+
+  // Documents
+  documents.forEach(d => {
+    events.push({
+      id: `doc-${d.id}`, date: d.created_at, type: 'document',
+      titre: `Document ajouté — ${d.nom_fichier || d.type_document || 'Fichier'}`,
+      detail: d.type_document,
+      icon: '📄', couleur: 'text-gray-700', bg: 'bg-gray-50',
+    })
+  })
+
+  // Trier par date décroissante
+  events.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+
+  if (events.length === 0) return (
+    <div className="card text-center py-16 text-gray-300">
+      <span className="text-4xl block mb-3">📋</span>
+      <p>Aucun événement enregistré</p>
+    </div>
+  )
+
+  // Grouper par mois
+  const grouped: Record<string, TimelineEvent[]> = {}
+  events.forEach(e => {
+    const mois = new Date(e.date).toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })
+    ;(grouped[mois] = grouped[mois] || []).push(e)
+  })
+
+  return (
+    <div className="space-y-6">
+      {Object.entries(grouped).map(([mois, evts]) => (
+        <div key={mois}>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="h-px flex-1 bg-gray-100" />
+            <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider capitalize">{mois}</span>
+            <div className="h-px flex-1 bg-gray-100" />
+          </div>
+          <div className="relative">
+            {/* Ligne verticale */}
+            <div className="absolute left-[19px] top-0 bottom-0 w-px bg-gray-100" />
+            <div className="space-y-1">
+              {evts.map((e, i) => (
+                <div key={e.id} className="flex items-start gap-4 pl-1">
+                  {/* Point timeline */}
+                  <div className={`w-10 h-10 rounded-full ${e.bg} flex items-center justify-center text-base flex-shrink-0 border-2 border-white shadow-sm z-10`}>
+                    {e.icon}
+                  </div>
+                  <div className={`flex-1 rounded-xl p-3 mb-2 ${e.bg} border border-white/50`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <span className={`font-semibold text-sm ${e.couleur} capitalize`}>{e.titre}</span>
+                      <span className="text-xs text-gray-400 flex-shrink-0">
+                        {new Date(e.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}
+                        {' '}
+                        <span className="opacity-70">
+                          {new Date(e.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </span>
+                    </div>
+                    {e.detail && <p className="text-xs text-gray-500 mt-0.5">{e.detail}</p>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
