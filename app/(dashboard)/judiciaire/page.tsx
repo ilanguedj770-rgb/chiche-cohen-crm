@@ -65,7 +65,8 @@ export default function JudiciaireePage() {
       utilisResult.data?.forEach(u => utilMap[u.id] = u)
 
       // Enrichir les clients de tous les dossiers
-      const allClientIds = [...new Set(Object.values(dossMap).map((d: any) => d.client_id))].filter(Boolean)
+      const allClientIdsRaw = Object.values(dossMap).map((d: any) => d.client_id).filter(Boolean)
+      const allClientIds = allClientIdsRaw.filter((id: any, index: number) => allClientIdsRaw.indexOf(id) === index)
       if (allClientIds.length > 0) {
         const { data: allClients } = await supabase.from('clients').select('id, nom, prenom').in('id', allClientIds)
         allClients?.forEach(c => clientMap[c.id] = c)
