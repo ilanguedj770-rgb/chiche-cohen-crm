@@ -1,30 +1,49 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, FolderOpen, Users, Calendar, Stethoscope, Scale, BarChart3, Bell, Phone, Calculator, Gavel, FileText, Briefcase } from 'lucide-react'
-
-const nav = [
-  { section: 'Principal' },
-  { href: '/dashboard', label: 'Tableau de bord', icon: LayoutDashboard },
-  { href: '/alertes', label: 'Alertes', icon: Bell, badge: true },
-  { section: 'Dossiers' },
-  { href: '/leads', label: 'Leads', icon: Phone },
-  { href: '/dossiers', label: 'Dossiers', icon: FolderOpen },
-  { href: '/clients', label: 'Clients', icon: Users },
-  { section: 'Activité judiciaire' },
-  { href: '/audiences', label: 'Audiences', icon: Calendar },
-  { href: '/expertises', label: 'Expertises', icon: Stethoscope },
-  { href: '/judiciaire', label: 'Suivi judiciaire', icon: Scale },
-  { section: 'Outils' },
-  { href: '/dintilhac', label: 'Calculateur Dintilhac', icon: Calculator },
-  { href: '/procedure', label: 'Procédures', icon: Gavel },
-  { href: '/apporteurs', label: 'Apporteurs', icon: Briefcase },
-  { section: 'Analyse' },
-  { href: '/statistiques', label: 'Statistiques', icon: BarChart3 },
-]
+import { useEffect, useState } from 'react'
+import { supabase } from '@/lib/supabase'
+import { LayoutDashboard, FolderOpen, Users, Calendar, Stethoscope, Scale, BarChart3, Bell, Phone, Calculator, Gavel, Briefcase } from 'lucide-react'
 
 export default function Sidebar() {
   const pathname = usePathname()
+  const [nbAlertes, setNbAlertes] = useState(0)
+
+  useEffect(() => {
+    async function loadAlertes() {
+      const today = new Date().toISOString().split('T')[0]
+      const in15 = new Date(Date.now() + 15 * 86400000).toISOString().split('T')[0]
+      const [dormants, audiences, expertises] = await Promise.all([
+        supabase.from('vue_dossiers_a_relancer').select('id', { count: 'exact', head: true }),
+        supabase.from('vue_audiences_a_venir').select('id', { count: 'exact', head: true }).lte('date_audience', in15),
+        supabase.from('vue_expertises_a_venir').select('id', { count: 'exact', head: true }).lte('date_expertise', new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0]),
+      ])
+      setNbAlertes((dormants.count || 0) + (audiences.count || 0) + (expertises.count || 0))
+    }
+    loadAlertes()
+    const interval = setInterval(loadAlertes, 5 * 60 * 1000) // refresh toutes les 5 min
+    return () => clearInterval(interval)
+  }, [])
+
+  const nav = [
+    { section: 'Principal' },
+    { href: '/dashboard', label: 'Tableau de bord', icon: LayoutDashboard },
+    { href: '/alertes', label: 'Alertes', icon: Bell, badge: nbAlertes },
+    { section: 'Dossiers' },
+    { href: '/leads', label: 'Leads', icon: Phone },
+    { href: '/dossiers', label: 'Dossiers', icon: FolderOpen },
+    { href: '/clients', label: 'Clients', icon: Users },
+    { section: 'Activité judiciaire' },
+    { href: '/audiences', label: 'Audiences', icon: Calendar },
+    { href: '/expertises', label: 'Expertises', icon: Stethoscope },
+    { href: '/judiciaire', label: 'Suivi judiciaire', icon: Scale },
+    { section: 'Outils' },
+    { href: '/dintilhac', label: 'Calculateur Dintilhac', icon: Calculator },
+    { href: '/procedure', label: 'Procédures', icon: Gavel },
+    { href: '/apporteurs', label: 'Apporteurs', icon: Briefcase },
+    { section: 'Analyse' },
+    { href: '/statistiques', label: 'Statistiques', icon: BarChart3 },
+  ]
 
   return (
     <aside className="fixed top-0 left-0 z-40 w-56 bg-white border-r border-gray-100 flex flex-col h-screen">
@@ -49,11 +68,17 @@ export default function Sidebar() {
           }
           const Icon = item.icon
           const active = pathname === item.href || pathname.startsWith(item.href + '/')
+          const badge = (item as any).badge
           return (
             <Link key={item.href} href={item.href}>
               <div className={`flex items-center gap-3 px-3 py-2 rounded-lg mb-0.5 transition-colors text-sm font-medium ${active ? 'bg-cabinet-blue text-white' : 'text-gray-600 hover:bg-gray-50 hover:text-gray-900'}`}>
                 <Icon size={16} className={active ? 'text-white' : 'text-gray-400'} />
-                {item.label}
+                <span className="flex-1">{item.label}</span>
+                {badge > 0 && (
+                  <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold min-w-[20px] text-center ${active ? 'bg-white text-cabinet-blue' : 'bg-red-500 text-white'}`}>
+                    {badge > 99 ? '99+' : badge}
+                  </span>
+                )}
               </div>
             </Link>
           )

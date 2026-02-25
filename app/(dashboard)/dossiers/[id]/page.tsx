@@ -44,6 +44,14 @@ export default function DossierDetail() {
   const [savingRelance, setSavingRelance] = useState(false)
   const [noteMode, setNoteMode] = useState<'note' | 'relance'>('note')
   const [showEtapeMenu, setShowEtapeMenu] = useState(false)
+  const [showAddExpertise, setShowAddExpertise] = useState(false)
+  const [expertiseForm, setExpertiseForm] = useState({ type_expertise: 'amiable', date_expertise: '', heure: '10:00', lieu_expertise: '', expert_nom: '', medecin_conseil_victime: '' })
+  const [savingExpertise, setSavingExpertise] = useState(false)
+  const [editingExpertise, setEditingExpertise] = useState<string | null>(null)
+  const [expertiseResultForm, setExpertiseResultForm] = useState<any>({})
+  const [showAddAudience, setShowAddAudience] = useState(false)
+  const [audienceForm, setAudienceForm] = useState({ nature: 'audience_orientation', date_audience: '', heure: '09:00', tribunal: '', salle: '', avocat_id: '' })
+  const [savingAudience, setSavingAudience] = useState(false)
   const [editingEtape, setEditingEtape] = useState(false)
   const [editFinancier, setEditFinancier] = useState(false)
   const [editProcedure, setEditProcedure] = useState(false)
@@ -85,6 +93,54 @@ export default function DossierDetail() {
     }
     load()
   }, [id])
+
+  const ajouterExpertise = async () => {
+    setSavingExpertise(true)
+    const dt = expertiseForm.heure ? `${expertiseForm.date_expertise}T${expertiseForm.heure}:00` : expertiseForm.date_expertise
+    await supabase.from('expertises').insert({
+      dossier_id: id, type_expertise: expertiseForm.type_expertise,
+      date_expertise: expertiseForm.date_expertise ? dt : null,
+      lieu_expertise: expertiseForm.lieu_expertise || null,
+      expert_nom: expertiseForm.expert_nom || null,
+      medecin_conseil_victime: expertiseForm.medecin_conseil_victime || null,
+    })
+    const { data: e } = await supabase.from('expertises').select('*').eq('dossier_id', id).order('date_expertise')
+    if (e) setExpertises(e)
+    setSavingExpertise(false)
+    setShowAddExpertise(false)
+    setExpertiseForm({ type_expertise: 'amiable', date_expertise: '', heure: '10:00', lieu_expertise: '', expert_nom: '', medecin_conseil_victime: '' })
+  }
+
+  const saveExpertiseResults = async (expertiseId: string) => {
+    await supabase.from('expertises').update({
+      taux_dfp: expertiseResultForm.taux_dfp ? Number(expertiseResultForm.taux_dfp) : null,
+      duree_itt_jours: expertiseResultForm.duree_itt_jours ? Number(expertiseResultForm.duree_itt_jours) : null,
+      quantum_doloris: expertiseResultForm.quantum_doloris ? Number(expertiseResultForm.quantum_doloris) : null,
+      prejudice_esthetique: expertiseResultForm.prejudice_esthetique ? Number(expertiseResultForm.prejudice_esthetique) : null,
+      date_rapport: expertiseResultForm.date_rapport || null,
+    }).eq('id', expertiseId)
+    const { data: e } = await supabase.from('expertises').select('*').eq('dossier_id', id).order('date_expertise')
+    if (e) setExpertises(e)
+    setEditingExpertise(null)
+  }
+
+  const ajouterAudience = async () => {
+    setSavingAudience(true)
+    const dt = audienceForm.heure ? `${audienceForm.date_audience}T${audienceForm.heure}:00` : audienceForm.date_audience
+    await supabase.from('audiences').insert({
+      dossier_id: id, nature: audienceForm.nature,
+      date_audience: dt,
+      tribunal: audienceForm.tribunal || null,
+      salle: audienceForm.salle || null,
+      avocat_id: audienceForm.avocat_id || null,
+      rappel_j15_envoye: false, rappel_j2_envoye: false,
+    })
+    const { data: a } = await supabase.from('audiences').select('*, avocat:utilisateurs(nom, prenom)').eq('dossier_id', id).order('date_audience')
+    if (a) setAudiences(a)
+    setSavingAudience(false)
+    setShowAddAudience(false)
+    setAudienceForm({ nature: 'audience_orientation', date_audience: '', heure: '09:00', tribunal: '', salle: '', avocat_id: '' })
+  }
 
   const saveProcedure = async () => {
     setSavingProc(true)
@@ -447,7 +503,57 @@ export default function DossierDetail() {
       {/* Onglet Expertises */}
       {tab === 'expertises' && (
         <div className="space-y-4">
-          {expertises.length === 0 ? (
+          <div className="flex justify-end">
+            <button onClick={() => setShowAddExpertise(s => !s)} className="btn-primary flex items-center gap-2 text-sm py-1.5">
+              <Plus size={14} /> Ajouter une expertise
+            </button>
+          </div>
+
+          {/* Formulaire ajout rapide */}
+          {showAddExpertise && (
+            <div className="card border border-purple-100 bg-purple-50/30">
+              <h3 className="font-semibold mb-4 text-sm flex items-center gap-2"><Stethoscope size={14} className="text-purple-500" />Nouvelle expertise</h3>
+              <div className="grid grid-cols-3 gap-4 mb-4">
+                <div>
+                  <label className="text-xs text-gray-500 font-medium block mb-1">Type</label>
+                  <select value={expertiseForm.type_expertise} onChange={e => setExpertiseForm(f => ({ ...f, type_expertise: e.target.value }))} className="input-field">
+                    <option value="amiable">Amiable</option>
+                    <option value="judiciaire">Judiciaire</option>
+                    <option value="contra_expertisse">Contre-expertise</option>
+                    <option value="suivi">Suivi</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 font-medium block mb-1">Date</label>
+                  <input type="date" value={expertiseForm.date_expertise} onChange={e => setExpertiseForm(f => ({ ...f, date_expertise: e.target.value }))} className="input-field" />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 font-medium block mb-1">Heure</label>
+                  <input type="time" value={expertiseForm.heure} onChange={e => setExpertiseForm(f => ({ ...f, heure: e.target.value }))} className="input-field" />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 font-medium block mb-1">Médecin expert</label>
+                  <input value={expertiseForm.expert_nom} onChange={e => setExpertiseForm(f => ({ ...f, expert_nom: e.target.value }))} className="input-field" placeholder="Dr Dupont..." />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 font-medium block mb-1">Médecin conseil victime</label>
+                  <input value={expertiseForm.medecin_conseil_victime} onChange={e => setExpertiseForm(f => ({ ...f, medecin_conseil_victime: e.target.value }))} className="input-field" placeholder="Dr Martin..." />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 font-medium block mb-1">Lieu</label>
+                  <input value={expertiseForm.lieu_expertise} onChange={e => setExpertiseForm(f => ({ ...f, lieu_expertise: e.target.value }))} className="input-field" placeholder="Adresse..." />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2">
+                <button onClick={() => setShowAddExpertise(false)} className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 flex items-center gap-1"><X size={13} /> Annuler</button>
+                <button onClick={ajouterExpertise} disabled={savingExpertise} className="btn-primary flex items-center gap-2 text-sm py-1.5">
+                  <Save size={13} /> {savingExpertise ? 'Enregistrement...' : 'Ajouter'}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {expertises.length === 0 && !showAddExpertise ? (
             <div className="card text-center py-12 text-gray-400">
               <Stethoscope size={40} className="mx-auto mb-3 opacity-20" />
               <p>Aucune expertise enregistrée</p>
@@ -457,18 +563,59 @@ export default function DossierDetail() {
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
                   <Stethoscope size={16} className="text-purple-500" />
-                  <span className="font-semibold capitalize">{e.type === 'judiciaire' ? 'Expertise judiciaire' : e.type === 'amiable' ? 'Expertise amiable' : 'Sapiteur'}</span>
-                  {e.date_expertise && <span className="badge bg-purple-50 text-purple-700">{formatDateShort(e.date_expertise)}{e.heure_expertise && ` à ${e.heure_expertise.slice(0,5)}`}</span>}
+                  <span className="font-semibold capitalize">{e.type_expertise === 'judiciaire' ? 'Expertise judiciaire' : e.type_expertise === 'amiable' ? 'Expertise amiable' : e.type_expertise === 'contra_expertisse' ? 'Contre-expertise' : 'Expertise de suivi'}</span>
+                  {e.date_expertise && <span className="badge bg-purple-50 text-purple-700">{formatDateShort(e.date_expertise)}</span>}
                 </div>
-                {e.date_rapport && <span className="text-xs text-gray-400">Rapport : {formatDateShort(e.date_rapport)}</span>}
+                <div className="flex items-center gap-2">
+                  {e.date_rapport && <span className="text-xs text-gray-400">Rapport : {formatDateShort(e.date_rapport)}</span>}
+                  <button onClick={() => { setEditingExpertise(e.id === editingExpertise ? null : e.id); setExpertiseResultForm({ taux_dfp: e.taux_dfp || '', duree_itt_jours: e.duree_itt_jours || '', quantum_doloris: e.quantum_doloris || '', prejudice_esthetique: e.prejudice_esthetique || '', date_rapport: e.date_rapport?.slice(0,10) || '' }) }} className="text-xs text-cabinet-blue hover:underline flex items-center gap-1">
+                    <Edit2 size={11} /> Résultats
+                  </button>
+                </div>
               </div>
               <div className="grid grid-cols-4 gap-4 mb-4">
                 <Info label="Expert" value={e.expert_nom} />
-                <Info label="Spécialité" value={e.expert_specialite} />
-                <Info label="Médecin conseil" value={e.medecin_conseil_nom} />
+                <Info label="Médecin conseil" value={e.medecin_conseil_victime || e.medecin_conseil_nom} />
                 <Info label="Lieu" value={e.lieu_expertise} />
+                <Info label="Date rapport" value={formatDateShort(e.date_rapport)} />
               </div>
-              {(e.taux_dfp || e.duree_itt_jours || e.quantum_doloris || e.prejudice_esthetique) && (
+
+              {/* Formulaire résultats médicaux */}
+              {editingExpertise === e.id && (
+                <div className="border-t border-purple-100 pt-4 mt-2">
+                  <h4 className="text-xs font-semibold text-gray-500 uppercase mb-3">Résultats médicaux</h4>
+                  <div className="grid grid-cols-5 gap-3">
+                    <div>
+                      <label className="text-xs text-gray-400 block mb-1">DFP (%)</label>
+                      <input type="number" step="0.5" min="0" max="100" value={expertiseResultForm.taux_dfp} onChange={e => setExpertiseResultForm((f: any) => ({ ...f, taux_dfp: e.target.value }))} className="input-field" placeholder="0" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-400 block mb-1">ITT (jours)</label>
+                      <input type="number" value={expertiseResultForm.duree_itt_jours} onChange={e => setExpertiseResultForm((f: any) => ({ ...f, duree_itt_jours: e.target.value }))} className="input-field" placeholder="0" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-400 block mb-1">Quantum doloris /7</label>
+                      <input type="number" step="0.5" min="0" max="7" value={expertiseResultForm.quantum_doloris} onChange={e => setExpertiseResultForm((f: any) => ({ ...f, quantum_doloris: e.target.value }))} className="input-field" placeholder="0" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-400 block mb-1">Préj. esthétique /7</label>
+                      <input type="number" step="0.5" min="0" max="7" value={expertiseResultForm.prejudice_esthetique} onChange={e => setExpertiseResultForm((f: any) => ({ ...f, prejudice_esthetique: e.target.value }))} className="input-field" placeholder="0" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-400 block mb-1">Date rapport</label>
+                      <input type="date" value={expertiseResultForm.date_rapport} onChange={ev => setExpertiseResultForm((f: any) => ({ ...f, date_rapport: ev.target.value }))} className="input-field" />
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2 mt-3">
+                    <button onClick={() => setEditingExpertise(null)} className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs text-gray-600 hover:bg-gray-50 flex items-center gap-1"><X size={11} /> Annuler</button>
+                    <button onClick={() => saveExpertiseResults(e.id)} className="btn-primary flex items-center gap-2 text-xs py-1.5 px-3">
+                      <Save size={11} /> Enregistrer les résultats
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {(e.taux_dfp || e.duree_itt_jours || e.quantum_doloris || e.prejudice_esthetique) && editingExpertise !== e.id && (
                 <div className="grid grid-cols-4 gap-4 pt-4 border-t border-gray-100">
                   {e.taux_dfp && <Info label="DFP" value={`${e.taux_dfp}%`} />}
                   {e.duree_itt_jours && <Info label="ITT" value={`${e.duree_itt_jours} jours`} />}
@@ -498,7 +645,7 @@ export default function DossierDetail() {
                   {future ? <><div className="text-xl font-bold">J-{jours}</div><div className="text-xs">jours</div></> : <div className="text-xs">Passée</div>}
                 </div>
                 <div className="flex-1">
-                  <div className="font-semibold">{a.nature}</div>
+                  <div className="font-semibold">{a.nature?.replace(/_/g,' ')}</div>
                   <div className="text-sm text-gray-500">{formatDate(a.date_audience)}{a.tribunal && ` • ${a.tribunal}`}{a.salle && ` • Salle ${a.salle}`}</div>
                   {(a as any).avocat && <div className="text-xs text-gray-400 mt-0.5">Avocat : {(a as any).avocat.prenom} {(a as any).avocat.nom}</div>}
                 </div>
@@ -506,6 +653,55 @@ export default function DossierDetail() {
               </div>
             )
           })}
+
+          {/* Bouton + formulaire ajout audience */}
+          <div className="flex justify-end">
+            <button onClick={() => setShowAddAudience(s => !s)} className="flex items-center gap-2 text-sm text-cabinet-blue hover:underline">
+              <Plus size={14} /> Ajouter une audience
+            </button>
+          </div>
+          {showAddAudience && (
+            <div className="card border border-blue-100 bg-blue-50/20">
+              <h3 className="font-semibold mb-4 text-sm flex items-center gap-2"><Calendar size={14} className="text-cabinet-blue" />Nouvelle audience</h3>
+              <div className="grid grid-cols-3 gap-4 mb-4">
+                <div>
+                  <label className="text-xs text-gray-500 font-medium block mb-1">Nature</label>
+                  <select value={audienceForm.nature} onChange={e => setAudienceForm(f => ({ ...f, nature: e.target.value }))} className="input-field">
+                    {[['audience_orientation','Orientation'],['audience_fond','Fond'],['delibere','Délibéré'],['refere','Référé'],['conciliation','Conciliation']].map(([v,l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 font-medium block mb-1">Date *</label>
+                  <input type="date" value={audienceForm.date_audience} onChange={e => setAudienceForm(f => ({ ...f, date_audience: e.target.value }))} className="input-field" />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 font-medium block mb-1">Heure</label>
+                  <input type="time" value={audienceForm.heure} onChange={e => setAudienceForm(f => ({ ...f, heure: e.target.value }))} className="input-field" />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 font-medium block mb-1">Tribunal</label>
+                  <input value={audienceForm.tribunal} onChange={e => setAudienceForm(f => ({ ...f, tribunal: e.target.value }))} className="input-field" placeholder="TJ Aix..." />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 font-medium block mb-1">Salle</label>
+                  <input value={audienceForm.salle} onChange={e => setAudienceForm(f => ({ ...f, salle: e.target.value }))} className="input-field" placeholder="3B..." />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 font-medium block mb-1">Avocat</label>
+                  <select value={audienceForm.avocat_id} onChange={e => setAudienceForm(f => ({ ...f, avocat_id: e.target.value }))} className="input-field">
+                    <option value="">— Non affecté —</option>
+                    {utilisateurs.map(u => <option key={u.id} value={u.id}>{u.prenom} {u.nom}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="flex justify-end gap-2">
+                <button onClick={() => setShowAddAudience(false)} className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 flex items-center gap-1"><X size={13} /> Annuler</button>
+                <button onClick={ajouterAudience} disabled={savingAudience || !audienceForm.date_audience} className="btn-primary flex items-center gap-2 text-sm py-1.5">
+                  <Save size={13} /> {savingAudience ? 'Enregistrement...' : 'Ajouter'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
