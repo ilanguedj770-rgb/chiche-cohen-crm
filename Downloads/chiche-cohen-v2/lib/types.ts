@@ -100,25 +100,41 @@ export interface Expertise {
   dossier_id: string
   type: string
   expert_nom?: string
+  expert_specialite?: string
   medecin_conseil_nom?: string
+  medecin_conseil_email?: string
+  medecin_conseil_telephone?: string
   date_expertise?: string
+  heure_expertise?: string
   lieu_expertise?: string
+  date_rapport?: string
   taux_dfp?: number
   duree_itt_jours?: number
   quantum_doloris?: number
   prejudice_esthetique?: number
+  prejudice_sexuel?: boolean
+  prejudice_agrement?: boolean
+  consolidation_date?: string
   observations?: string
+  rappel_j7_envoye?: boolean
+  rappel_j2_envoye?: boolean
+  created_at?: string
 }
 
 export interface Audience {
   id: string
-  dossier_id: string
+  dossier_id?: string
+  procedure_id?: string
   date_audience: string
   nature: string
   tribunal?: string
+  salle?: string
+  avocat_id?: string
   resultat?: string
-  rappel_j15_envoye: boolean
-  rappel_j2_envoye: boolean
+  prochaine_echeance?: string
+  rappel_j15_envoye?: boolean
+  rappel_j2_envoye?: boolean
+  created_at?: string
 }
 
 export interface AudienceVue {
