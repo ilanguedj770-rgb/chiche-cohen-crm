@@ -1,12 +1,15 @@
 'use client'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { LayoutDashboard, Settings, FolderOpen, Users, Calendar, Stethoscope, Scale, BarChart3, Bell, Phone, Calculator, Gavel, Briefcase } from 'lucide-react'
+import { LayoutDashboard, Search, Settings, FolderOpen, Users, Calendar, Stethoscope, Scale, BarChart3, Bell, Phone, Calculator, Gavel, Briefcase } from 'lucide-react'
 
 export default function Sidebar() {
   const pathname = usePathname()
+  const router = useRouter()
+  const [searchQ, setSearchQ] = useState('')
   const [nbAlertes, setNbAlertes] = useState(0)
 
   useEffect(() => {
@@ -59,6 +62,18 @@ export default function Sidebar() {
             <div className="text-xs text-gray-400">Cabinet d'avocats</div>
           </div>
         </div>
+      </div>
+
+      {/* Barre de recherche rapide */}
+      <div className="px-3 mb-3">
+        <form onSubmit={e => { e.preventDefault(); if (searchQ.trim()) { router.push(`/recherche?q=${encodeURIComponent(searchQ)}`); setSearchQ('') } }}>
+          <div className="relative">
+            <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input type="text" value={searchQ} onChange={e => setSearchQ(e.target.value)}
+              placeholder="Recherche rapide..."
+              className="w-full pl-8 pr-3 py-2 text-xs rounded-lg bg-gray-100 border-0 focus:bg-white focus:ring-1 focus:ring-cabinet-blue/30 outline-none transition-colors" />
+          </div>
+        </form>
       </div>
 
       {/* Navigation */}
