@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useState, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
-import { TrendingUp, Euro, FolderOpen, Users, Award, Target, Clock, BarChart2, ChevronDown } from 'lucide-react'
+import { TrendingUp, Euro, FolderOpen, Users, Award, Target, Clock, BarChart2, Download } from 'lucide-react'
 import { ETAPES_LABELS, TYPE_ACCIDENT_LABELS, type Etape, type TypeAccident } from '@/lib/types'
 
 function eur(v?: number | null) {
@@ -119,6 +119,10 @@ export default function StatistiquesPage() {
               </button>
             ))}
           </div>
+          <a href="/api/export/dossiers" download
+            className="flex items-center gap-2 px-4 py-2 border border-gray-200 rounded-xl text-sm text-gray-600 hover:bg-gray-50 transition-colors">
+            <Download size={14} /> Export CSV
+          </a>
         </div>
       </div>
 

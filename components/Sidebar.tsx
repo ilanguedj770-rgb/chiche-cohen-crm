@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { LayoutDashboard, Search, Settings, FolderOpen, Users, Calendar, Stethoscope, Scale, BarChart3, Bell, Phone, Calculator, Gavel, Briefcase } from 'lucide-react'
+import { LayoutDashboard, Search, Settings, FolderOpen, Users, Calendar, Stethoscope, Scale, BarChart3, Bell, Phone, Calculator, Gavel, Briefcase, FileText } from 'lucide-react'
 
 export default function Sidebar() {
   const pathname = usePathname()
@@ -32,6 +32,7 @@ export default function Sidebar() {
     { section: 'Principal' },
     { href: '/dashboard', label: 'Tableau de bord', icon: LayoutDashboard },
     { href: '/alertes', label: 'Alertes', icon: Bell, badge: nbAlertes },
+    { href: '/agenda', label: 'Agenda', icon: Calendar },
     { section: 'Dossiers' },
     { href: '/leads', label: 'Leads', icon: Phone },
     { href: '/dossiers', label: 'Dossiers', icon: FolderOpen },
@@ -44,6 +45,7 @@ export default function Sidebar() {
     { href: '/dintilhac', label: 'Calculateur Dintilhac', icon: Calculator },
     { href: '/procedure', label: 'Procédures', icon: Gavel },
     { href: '/apporteurs', label: 'Apporteurs', icon: Briefcase },
+    { href: '/documents', label: 'Documents', icon: FileText },
     { section: 'Analyse' },
     { href: '/statistiques', label: 'Statistiques', icon: BarChart3 },
     { href: '/parametres', label: 'Paramètres', icon: Settings },
