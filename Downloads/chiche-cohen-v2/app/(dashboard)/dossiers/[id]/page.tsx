@@ -487,10 +487,6 @@ export default function DossierDetail() {
           ))}
         </div>
       )}
-    </div>
-  )
-}
-
       {/* Onglet Documents */}
       {tab === 'documents' && (
         <div className="space-y-4">
@@ -571,6 +567,10 @@ export default function DossierDetail() {
           )}
         </div>
       )}
+
+    </div>
+  )
+}
 
 function Info({ label, value, icon }: { label: string; value?: string | null; icon?: React.ReactNode }) {
   return (
