@@ -1,5 +1,5 @@
 'use client'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { Phone, User, Car, Stethoscope, Scale, AlertCircle, CheckCircle, ChevronRight } from 'lucide-react'
@@ -31,15 +31,25 @@ export default function NouveauLeadPage() {
     nom: '',
     prenom: '',
     telephone: '',
+    telephone_whatsapp: '',
     email: '',
+    date_naissance: '',
     // Dossier
     type_accident: 'accident_route',
     date_accident: '',
     circonstances: '',
     source: 'appel_entrant',
     apporteur_nom: '',
+    priorite: 'normale',
+    juriste_id: '',
     notes: '',
   })
+  const [utilisateurs, setUtilisateurs] = useState<any[]>([])
+
+  useEffect(() => {
+    supabase.from('utilisateurs').select('id, nom, prenom, role').in('role', ['juriste', 'admin']).eq('actif', true)
+      .then(({ data }) => { if (data) setUtilisateurs(data) })
+  }, [])
 
   function set(field: string, value: string) {
     setForm(f => ({ ...f, [field]: value }))
@@ -78,7 +88,8 @@ export default function NouveauLeadPage() {
           etape: 'qualification',
           source: form.source,
           notes: form.notes || null,
-          priorite: 'normal',
+          priorite: form.priorite,
+          juriste_id: form.juriste_id || null,
           consolidation_atteinte: false,
           refus_garantie: false,
           procedure_fgao: false,
@@ -200,6 +211,33 @@ export default function NouveauLeadPage() {
               <input className="form-input" placeholder="Maître Durand, Dr. Martin…" value={form.apporteur_nom} onChange={e => set('apporteur_nom', e.target.value)} />
             </div>
           )}
+        </div>
+
+        {/* Qualification */}
+        <div className="card">
+          <h2 className="font-semibold text-gray-800 mb-4">Qualification</h2>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className="form-label">Priorité</label>
+              <div className="grid grid-cols-2 gap-2">
+                {[['basse','🔵 Basse'],['normale','⚪ Normale'],['haute','🟠 Haute'],['urgente','🔴 Urgente']].map(([v,l]) => (
+                  <button key={v} onClick={() => set('priorite', v)}
+                    className={"p-2 rounded-lg border text-xs text-center transition-all " + (form.priorite === v ? 'border-cabinet-blue bg-blue-50 font-medium text-cabinet-blue' : 'border-gray-200 hover:border-gray-300 text-gray-700')}>
+                    {l}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div>
+              <label className="form-label">Juriste assigné</label>
+              <select className="form-input" value={form.juriste_id} onChange={e => set('juriste_id', e.target.value)}>
+                <option value="">Non assigné</option>
+                {utilisateurs.map(u => (
+                  <option key={u.id} value={u.id}>{u.prenom} {u.nom} ({u.role})</option>
+                ))}
+              </select>
+            </div>
+          </div>
         </div>
 
         {/* Notes rapides */}
