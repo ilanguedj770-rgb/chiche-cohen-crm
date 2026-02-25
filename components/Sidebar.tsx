@@ -3,7 +3,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { LayoutDashboard, FolderOpen, Users, Calendar, Stethoscope, Scale, BarChart3, Bell, Phone, Calculator, Gavel, Briefcase } from 'lucide-react'
+import { LayoutDashboard, Settings, FolderOpen, Users, Calendar, Stethoscope, Scale, BarChart3, Bell, Phone, Calculator, Gavel, Briefcase } from 'lucide-react'
 
 export default function Sidebar() {
   const pathname = usePathname()
@@ -43,6 +43,7 @@ export default function Sidebar() {
     { href: '/apporteurs', label: 'Apporteurs', icon: Briefcase },
     { section: 'Analyse' },
     { href: '/statistiques', label: 'Statistiques', icon: BarChart3 },
+    { href: '/parametres', label: 'Paramètres', icon: Settings },
   ]
 
   return (
