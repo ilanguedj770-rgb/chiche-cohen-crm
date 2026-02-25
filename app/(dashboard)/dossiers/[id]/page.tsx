@@ -2,8 +2,9 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { ETAPES_LABELS, ETAPES_COULEURS, TYPE_ACCIDENT_LABELS, type Dossier, type Client, type Etape, type Expertise, type Audience } from '@/lib/types'
-import { ArrowLeft, Phone, Mail, Calendar, Scale, Stethoscope, Euro, ChevronRight, Plus, Save, AlertTriangle, FileText, Clock, Gavel, User, Upload, Download, Trash2, Edit2, X } from 'lucide-react'
+import { ArrowLeft, Download, Phone, Mail, Calendar, Scale, Stethoscope, Euro, ChevronRight, Plus, Save, AlertTriangle, FileText, Clock, Gavel, User, Upload, Download, Trash2, Edit2, X } from 'lucide-react'
 import Link from 'next/link'
+import { exportDossierPDF } from '@/lib/export-pdf'
 import { useParams } from 'next/navigation'
 
 const ETAPES_ORDRE: Etape[] = ['qualification','mandat','constitution_dossier','expertise_amiable','offre_assureur','negociation','procedure_judiciaire','transaction','encaissement']
@@ -33,6 +34,7 @@ export default function DossierDetail() {
   const [notes, setNotes] = useState<any[]>([])
   const [historique, setHistorique] = useState<any[]>([])
   const [utilisateurs, setUtilisateurs] = useState<any[]>([])
+  const [cabinet, setCabinet] = useState<any>(null)
   const [documents, setDocuments] = useState<any[]>([])
   const [uploading, setUploading] = useState(false)
   const [tab, setTab] = useState<'detail' | 'procedure' | 'expertises' | 'audiences' | 'financier' | 'notes' | 'historique' | 'documents'>('detail')
