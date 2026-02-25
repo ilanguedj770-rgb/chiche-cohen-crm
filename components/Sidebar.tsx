@@ -1,7 +1,7 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { LayoutDashboard, FolderOpen, Users, Calendar, Stethoscope, Scale, BarChart3, Settings, Bell, Phone } from 'lucide-react'
+import { LayoutDashboard, FolderOpen, Users, Calendar, Stethoscope, Scale, BarChart3, Settings, Bell, Phone, Calculator } from 'lucide-react'
 
 const nav = [
   { href: '/dashboard', label: 'Tableau de bord', icon: LayoutDashboard },
@@ -10,6 +10,7 @@ const nav = [
   { href: '/leads/nouveau', label: 'Nouveau lead', icon: Phone },
   { href: '/clients', label: 'Clients', icon: Users },
   { href: '/judiciaire', label: 'Suivi judiciaire', icon: Scale },
+  { href: '/dintilhac', label: 'Calculateur Dintilhac', icon: Calculator },
   { href: '/audiences', label: 'Audiences', icon: Calendar },
   { href: '/expertises', label: 'Expertises', icon: Stethoscope },
   { href: '/statistiques', label: 'Statistiques', icon: BarChart3 },
