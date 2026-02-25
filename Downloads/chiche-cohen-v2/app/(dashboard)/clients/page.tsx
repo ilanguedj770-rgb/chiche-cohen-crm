@@ -120,7 +120,6 @@ export default function ClientsPage() {
           </table>
         )}
       </div>
-    </div>
 
       {/* Modal nouveau client */}
       {showModal && (
