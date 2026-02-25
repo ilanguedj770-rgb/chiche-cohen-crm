@@ -23,8 +23,17 @@ export interface Client {
   prenom: string
   date_naissance?: string
   telephone?: string
+  telephone_whatsapp?: string
   email?: string
+  adresse?: string
+  code_postal?: string
+  ville?: string
   profession?: string
+  statut_professionnel?: string
+  revenus_annuels_nets?: number
+  portail_actif?: boolean
+  created_at?: string
+  updated_at?: string
 }
 
 export interface Utilisateur {
@@ -59,6 +68,8 @@ export interface Dossier {
   montant_reclame?: number
   montant_obtenu?: number
   taux_honoraires_resultat: number
+  honoraires_fixes?: number
+  honoraires_resultat?: number
   score_potentiel?: number
   priorite: string
   source: string
