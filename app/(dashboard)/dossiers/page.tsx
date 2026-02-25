@@ -1,304 +1,305 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { ETAPES_LABELS, ETAPES_COULEURS, TYPE_ACCIDENT_LABELS, type Dossier, type Client, type Etape, type Expertise, type Audience } from '@/lib/types'
+import { ETAPES_LABELS, ETAPES_COULEURS, TYPE_ACCIDENT_LABELS, type DossierPipeline, type Etape, type TypeAccident } from '@/lib/types'
 import { format, parseISO } from 'date-fns'
 import { fr } from 'date-fns/locale'
-import { ArrowLeft, Phone, Mail, Calendar, FileText, ChevronRight, Scale, Stethoscope, Euro } from 'lucide-react'
+import {
+  Search, Plus, FolderOpen, Clock, Filter, X,
+  ChevronDown, Phone, Mail
+} from 'lucide-react'
 import Link from 'next/link'
-import { useParams } from 'next/navigation'
 
-const ETAPES_ORDRE: Etape[] = [
-  'qualification', 'mandat', 'constitution_dossier', 'expertise_amiable',
-  'offre_assureur', 'negociation', 'procedure_judiciaire', 'transaction', 'encaissement'
-]
+const PRIORITE_COULEURS: Record<string, string> = {
+  urgente: 'bg-red-100 text-red-700',
+  haute: 'bg-orange-100 text-orange-700',
+  normale: 'bg-blue-100 text-blue-700',
+  basse: 'bg-gray-100 text-gray-500',
+}
 
-export default function DossierDetail() {
-  const params = useParams()
-  const id = params.id as string
-  const [dossier, setDossier] = useState<Dossier | null>(null)
-  const [client, setClient] = useState<Client | null>(null)
-  const [expertises, setExpertises] = useState<Expertise[]>([])
-  const [audiences, setAudiences] = useState<Audience[]>([])
+const PRIORITE_LABELS: Record<string, string> = {
+  urgente: 'Urgente',
+  haute: 'Haute',
+  normale: 'Normale',
+  basse: 'Basse',
+}
+
+export default function DossiersPage() {
+  const [dossiers, setDossiers] = useState<DossierPipeline[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState<'detail' | 'expertises' | 'audiences' | 'documents' | 'financier'>('detail')
+  const [search, setSearch] = useState('')
+  const [filtreEtape, setFiltreEtape] = useState<Etape | ''>('')
+  const [filtreType, setFiltreType] = useState<TypeAccident | ''>('')
+  const [filtreVoie, setFiltreVoie] = useState<'' | 'amiable' | 'judiciaire'>('')
+  const [filtrePriorite, setFiltrePriorite] = useState<string>('')
+  const [showFilters, setShowFilters] = useState(false)
+  const [vue, setVue] = useState<'liste' | 'pipeline'>('liste')
 
   useEffect(() => {
     async function load() {
-      const { data: d } = await supabase.from('dossiers').select('*').eq('id', id).single()
-      if (d) {
-        setDossier(d)
-        const [{ data: c }, { data: e }, { data: a }] = await Promise.all([
-          supabase.from('clients').select('*').eq('id', d.client_id).single(),
-          supabase.from('expertises').select('*').eq('dossier_id', id).order('date_expertise'),
-          supabase.from('audiences').select('*').eq('dossier_id', id).order('date_audience'),
-        ])
-        if (c) setClient(c)
-        if (e) setExpertises(e)
-        if (a) setAudiences(a)
-      }
+      const { data } = await supabase
+        .from('vue_pipeline')
+        .select('*')
+        .order('updated_at', { ascending: false })
+      if (data) setDossiers(data)
       setLoading(false)
     }
     load()
-  }, [id])
+  }, [])
 
-  const avancerEtape = async () => {
-    if (!dossier) return
-    const idx = ETAPES_ORDRE.indexOf(dossier.etape)
-    if (idx < ETAPES_ORDRE.length - 1) {
-      const nouvelleEtape = ETAPES_ORDRE[idx + 1]
-      const { data } = await supabase.from('dossiers').update({ etape: nouvelleEtape }).eq('id', id).select().single()
-      if (data) setDossier(data)
+  const filteredDossiers = dossiers.filter(d => {
+    if (search) {
+      const s = search.toLowerCase()
+      const match = [d.client_nom, d.client_prenom, d.reference, d.assureur_nom]
+        .filter(Boolean)
+        .some(v => v!.toLowerCase().includes(s))
+      if (!match) return false
     }
+    if (filtreEtape && d.etape !== filtreEtape) return false
+    if (filtreType && d.type_accident !== filtreType) return false
+    if (filtreVoie && d.voie !== filtreVoie) return false
+    if (filtrePriorite && d.priorite !== filtrePriorite) return false
+    return true
+  })
+
+  const hasFilters = filtreEtape || filtreType || filtreVoie || filtrePriorite
+  const clearFilters = () => {
+    setFiltreEtape('')
+    setFiltreType('')
+    setFiltreVoie('')
+    setFiltrePriorite('')
   }
 
-  if (loading) return <div className="flex items-center justify-center h-screen"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cabinet-blue" /></div>
-  if (!dossier || !client) return <div className="p-8 text-gray-500">Dossier introuvable</div>
+  const etapeGroups = (Object.keys(ETAPES_LABELS) as Etape[]).filter(e => e !== 'archive')
 
-  const idxEtape = ETAPES_ORDRE.indexOf(dossier.etape)
+  if (loading) return (
+    <div className="flex items-center justify-center h-screen">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cabinet-blue" />
+    </div>
+  )
 
   return (
     <div className="p-8">
       {/* En-tête */}
-      <div className="flex items-start justify-between mb-6">
-        <div className="flex items-center gap-4">
-          <Link href="/dossiers" className="text-gray-400 hover:text-gray-600"><ArrowLeft size={20} /></Link>
-          <div>
-            <div className="flex items-center gap-3">
-              <h1 className="text-2xl font-bold text-gray-900">{client.nom} {client.prenom}</h1>
-              <span className={`badge ${ETAPES_COULEURS[dossier.etape]}`}>{ETAPES_LABELS[dossier.etape]}</span>
-              {dossier.voie === 'judiciaire' && <span className="badge bg-red-50 text-red-600">⚖️ Judiciaire</span>}
-            </div>
-            <div className="flex items-center gap-4 mt-1">
-              <span className="text-sm font-mono text-gray-400">{dossier.reference}</span>
-              <span className="text-sm text-gray-400">{TYPE_ACCIDENT_LABELS[dossier.type_accident]}</span>
-            </div>
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">Dossiers</h1>
+          <p className="text-gray-500 text-sm mt-1">{filteredDossiers.length} dossier(s){hasFilters ? ' (filtré)' : ''}</p>
+        </div>
+        <Link href="/dossiers/nouveau" className="btn-primary flex items-center gap-2">
+          <Plus size={16} />
+          Nouveau dossier
+        </Link>
+      </div>
+
+      {/* Barre de recherche et filtres */}
+      <div className="card mb-6 !p-4">
+        <div className="flex items-center gap-3">
+          <div className="flex-1 relative">
+            <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+            <input
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Rechercher par nom, référence, assureur..."
+              className="input !pl-10"
+            />
+          </div>
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={`btn-secondary flex items-center gap-2 ${hasFilters ? '!border-cabinet-blue !bg-cabinet-blue-light' : ''}`}
+          >
+            <Filter size={14} />
+            Filtres
+            {hasFilters && <span className="w-5 h-5 rounded-full bg-cabinet-blue text-white text-xs flex items-center justify-center">
+              {[filtreEtape, filtreType, filtreVoie, filtrePriorite].filter(Boolean).length}
+            </span>}
+            <ChevronDown size={14} className={`transition-transform ${showFilters ? 'rotate-180' : ''}`} />
+          </button>
+          <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
+            <button
+              onClick={() => setVue('liste')}
+              className={`px-3 py-2 text-xs font-medium ${vue === 'liste' ? 'bg-cabinet-blue text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+            >
+              Liste
+            </button>
+            <button
+              onClick={() => setVue('pipeline')}
+              className={`px-3 py-2 text-xs font-medium ${vue === 'pipeline' ? 'bg-cabinet-blue text-white' : 'bg-white text-gray-500 hover:bg-gray-50'}`}
+            >
+              Pipeline
+            </button>
           </div>
         </div>
-        {idxEtape < ETAPES_ORDRE.length - 1 && (
-          <button onClick={avancerEtape} className="btn-primary flex items-center gap-2">
-            Passer à : {ETAPES_LABELS[ETAPES_ORDRE[idxEtape + 1]]}
-            <ChevronRight size={16} />
-          </button>
-        )}
-      </div>
 
-      {/* Timeline étapes */}
-      <div className="flex items-center gap-1 mb-8 overflow-x-auto pb-2">
-        {ETAPES_ORDRE.map((etape, i) => {
-          const done = i < idxEtape
-          const active = i === idxEtape
-          return (
-            <div key={etape} className="flex items-center gap-1 flex-shrink-0">
-              <div className={`px-3 py-1.5 rounded-full text-xs font-medium whitespace-nowrap ${
-                active ? 'bg-cabinet-blue text-white' :
-                done ? 'bg-cabinet-blue-light text-cabinet-blue' :
-                'bg-gray-100 text-gray-400'
-              }`}>
-                {done && '✓ '}{ETAPES_LABELS[etape]}
-              </div>
-              {i < ETAPES_ORDRE.length - 1 && (
-                <div className={`w-6 h-0.5 ${done ? 'bg-cabinet-blue' : 'bg-gray-200'}`} />
-              )}
+        {/* Filtres dépliés */}
+        {showFilters && (
+          <div className="grid grid-cols-4 gap-3 mt-4 pt-4 border-t border-gray-100">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Étape</label>
+              <select value={filtreEtape} onChange={e => setFiltreEtape(e.target.value as Etape | '')} className="input text-xs">
+                <option value="">Toutes les étapes</option>
+                {(Object.keys(ETAPES_LABELS) as Etape[]).map(e => (
+                  <option key={e} value={e}>{ETAPES_LABELS[e]}</option>
+                ))}
+              </select>
             </div>
-          )
-        })}
-      </div>
-
-      {/* Onglets */}
-      <div className="flex gap-1 border-b border-gray-200 mb-6">
-        {[
-          { id: 'detail', label: 'Détail' },
-          { id: 'expertises', label: `Expertises (${expertises.length})` },
-          { id: 'audiences', label: `Audiences (${audiences.length})` },
-          { id: 'documents', label: 'Documents' },
-          { id: 'financier', label: 'Financier' },
-        ].map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id as any)}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === tab.id
-                ? 'border-cabinet-blue text-cabinet-blue'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
-
-      {/* Contenu onglets */}
-      {activeTab === 'detail' && (
-        <div className="grid grid-cols-3 gap-6">
-          {/* Infos client */}
-          <div className="card">
-            <h3 className="font-semibold text-gray-900 mb-4 flex items-center gap-2">
-              <span className="w-6 h-6 bg-cabinet-blue-light rounded-full flex items-center justify-center text-xs text-cabinet-blue font-bold">C</span>
-              Client
-            </h3>
-            <div className="space-y-3">
-              <InfoRow icon={<Phone size={14} />} label="Téléphone" value={client.telephone} />
-              <InfoRow icon={<Mail size={14} />} label="Email" value={client.email} />
-              <InfoRow icon={<Calendar size={14} />} label="Naissance" value={client.date_naissance ? format(parseISO(client.date_naissance), 'd MMMM yyyy', { locale: fr }) : undefined} />
-              <InfoRow label="Profession" value={client.profession} />
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Type d&apos;accident</label>
+              <select value={filtreType} onChange={e => setFiltreType(e.target.value as TypeAccident | '')} className="input text-xs">
+                <option value="">Tous les types</option>
+                {(Object.keys(TYPE_ACCIDENT_LABELS) as TypeAccident[]).map(t => (
+                  <option key={t} value={t}>{TYPE_ACCIDENT_LABELS[t]}</option>
+                ))}
+              </select>
             </div>
-          </div>
-
-          {/* Infos accident */}
-          <div className="card">
-            <h3 className="font-semibold text-gray-900 mb-4">Accident</h3>
-            <div className="space-y-3">
-              <InfoRow label="Type" value={TYPE_ACCIDENT_LABELS[dossier.type_accident]} />
-              <InfoRow label="Date" value={dossier.date_accident ? format(parseISO(dossier.date_accident), 'd MMMM yyyy', { locale: fr }) : undefined} />
-              <InfoRow label="Lieu" value={dossier.lieu_accident} />
-              <InfoRow label="Assureur" value={dossier.assureur_nom} />
-              <InfoRow label="Réf. sinistre" value={dossier.assureur_reference_sinistre} />
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Voie</label>
+              <select value={filtreVoie} onChange={e => setFiltreVoie(e.target.value as '' | 'amiable' | 'judiciaire')} className="input text-xs">
+                <option value="">Toutes les voies</option>
+                <option value="amiable">Amiable</option>
+                <option value="judiciaire">Judiciaire</option>
+              </select>
             </div>
-          </div>
-
-          {/* Flags et notes */}
-          <div className="card">
-            <h3 className="font-semibold text-gray-900 mb-4">Statut</h3>
-            <div className="space-y-2 mb-4">
-              <Flag label="Consolidation atteinte" active={dossier.consolidation_atteinte} />
-              <Flag label="Refus de garantie" active={dossier.refus_garantie} danger />
-              <Flag label="Procédure FGAO" active={dossier.procedure_fgao} />
-              <Flag label="Procédure CIVI" active={dossier.procedure_civi} />
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">Priorité</label>
+              <select value={filtrePriorite} onChange={e => setFiltrePriorite(e.target.value)} className="input text-xs">
+                <option value="">Toutes</option>
+                <option value="urgente">Urgente</option>
+                <option value="haute">Haute</option>
+                <option value="normale">Normale</option>
+                <option value="basse">Basse</option>
+              </select>
             </div>
-            {dossier.notes && (
-              <div className="mt-4 p-3 bg-gray-50 rounded-lg">
-                <p className="text-xs text-gray-500 font-medium mb-1">Notes</p>
-                <p className="text-sm text-gray-700">{dossier.notes}</p>
+            {hasFilters && (
+              <div className="col-span-4 flex justify-end">
+                <button onClick={clearFilters} className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1">
+                  <X size={12} /> Effacer les filtres
+                </button>
               </div>
             )}
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
-      {activeTab === 'expertises' && (
-        <div className="space-y-4">
-          {expertises.length === 0 && <EmptyState label="Aucune expertise enregistrée" />}
-          {expertises.map(e => (
-            <div key={e.id} className="card">
-              <div className="flex items-center justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <Stethoscope size={16} className="text-purple-500" />
-                  <span className="font-semibold capitalize">{e.type}</span>
-                  {e.date_expertise && <span className="text-sm text-gray-400">{format(parseISO(e.date_expertise), 'd MMMM yyyy', { locale: fr })}</span>}
-                </div>
-              </div>
-              <div className="grid grid-cols-4 gap-4">
-                <InfoRow label="Expert" value={e.expert_nom} />
-                <InfoRow label="Médecin conseil" value={e.medecin_conseil_nom} />
-                <InfoRow label="Lieu" value={e.lieu_expertise} />
-                <InfoRow label="DFP" value={e.taux_dfp ? `${e.taux_dfp}%` : undefined} />
-                <InfoRow label="ITT (jours)" value={e.duree_itt_jours?.toString()} />
-                <InfoRow label="Quantum doloris" value={e.quantum_doloris ? `${e.quantum_doloris}/7` : undefined} />
-                <InfoRow label="Préjudice esthétique" value={e.prejudice_esthetique ? `${e.prejudice_esthetique}/7` : undefined} />
-              </div>
-              {e.observations && <div className="mt-3 p-3 bg-gray-50 rounded text-sm text-gray-600">{e.observations}</div>}
+      {/* Vue Liste */}
+      {vue === 'liste' && (
+        <div className="space-y-2">
+          {filteredDossiers.length === 0 ? (
+            <div className="card text-center py-16 text-gray-400">
+              <FolderOpen size={40} className="mx-auto mb-3 opacity-30" />
+              <p>{search || hasFilters ? 'Aucun dossier ne correspond à votre recherche' : 'Aucun dossier pour l\'instant'}</p>
+              {!search && !hasFilters && (
+                <Link href="/dossiers/nouveau" className="btn-primary inline-flex items-center gap-2 mt-4">
+                  <Plus size={14} /> Créer un dossier
+                </Link>
+              )}
             </div>
-          ))}
-          <button className="btn-secondary flex items-center gap-2">
-            <Stethoscope size={16} /> Ajouter une expertise
-          </button>
-        </div>
-      )}
-
-      {activeTab === 'audiences' && (
-        <div className="space-y-4">
-          {audiences.length === 0 && <EmptyState label="Aucune audience enregistrée" />}
-          {audiences.map(a => (
-            <div key={a.id} className="card flex items-center justify-between">
-              <div className="flex items-center gap-4">
-                <div className="w-10 h-10 bg-red-50 rounded-lg flex items-center justify-center">
-                  <Scale size={18} className="text-red-500" />
-                </div>
-                <div>
-                  <div className="font-semibold text-gray-900">{a.nature}</div>
-                  <div className="text-sm text-gray-400">
-                    {format(parseISO(a.date_audience), "d MMMM yyyy 'à' HH'h'mm", { locale: fr })}
-                    {a.tribunal && ` • ${a.tribunal}`}
+          ) : (
+            filteredDossiers.map(d => (
+              <Link key={d.id} href={`/dossiers/${d.id}`}>
+                <div className="card !p-4 hover:shadow-md transition-shadow border-l-4 cursor-pointer"
+                  style={{ borderLeftColor: d.priorite === 'urgente' ? '#ef4444' : d.priorite === 'haute' ? '#f97316' : 'transparent' }}
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4 flex-1 min-w-0">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-3">
+                          <span className="font-semibold text-gray-900">{d.client_nom} {d.client_prenom}</span>
+                          <span className="font-mono text-xs text-gray-400">{d.reference}</span>
+                          {d.voie === 'judiciaire' && (
+                            <span className="badge bg-red-50 text-red-600 text-[10px]">Judiciaire</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-4 mt-1.5">
+                          <span className="text-xs text-gray-400">{TYPE_ACCIDENT_LABELS[d.type_accident]}</span>
+                          {d.juriste_nom && <span className="text-xs text-gray-400">Juriste: {d.juriste_nom}</span>}
+                          {d.avocat_nom && <span className="text-xs text-gray-400">Avocat: {d.avocat_nom}</span>}
+                          {d.assureur_nom && <span className="text-xs text-gray-400">Assureur: {d.assureur_nom}</span>}
+                        </div>
+                        <div className="flex items-center gap-3 mt-1.5">
+                          {d.client_telephone && (
+                            <span className="text-xs text-gray-400 flex items-center gap-1"><Phone size={10} />{d.client_telephone}</span>
+                          )}
+                          {d.client_email && (
+                            <span className="text-xs text-gray-400 flex items-center gap-1"><Mail size={10} />{d.client_email}</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 flex-shrink-0">
+                      {d.prochaine_expertise && (
+                        <span className="text-xs text-purple-500">
+                          Expertise: {format(parseISO(d.prochaine_expertise), 'd MMM', { locale: fr })}
+                        </span>
+                      )}
+                      {d.prochaine_audience && (
+                        <span className="text-xs text-red-500">
+                          Audience: {format(parseISO(d.prochaine_audience), 'd MMM', { locale: fr })}
+                        </span>
+                      )}
+                      {d.jours_inactif >= 7 && (
+                        <span className="flex items-center gap-1 text-xs text-orange-500">
+                          <Clock size={12} /> {d.jours_inactif}j
+                        </span>
+                      )}
+                      <span className={`badge ${PRIORITE_COULEURS[d.priorite]}`}>
+                        {PRIORITE_LABELS[d.priorite]}
+                      </span>
+                      <span className={`badge ${ETAPES_COULEURS[d.etape]}`}>
+                        {ETAPES_LABELS[d.etape]}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
-              {a.resultat && <span className="badge bg-green-100 text-green-700">{a.resultat}</span>}
-            </div>
-          ))}
-          <button className="btn-secondary flex items-center gap-2">
-            <Calendar size={16} /> Ajouter une audience
-          </button>
-        </div>
-      )}
-
-      {activeTab === 'financier' && (
-        <div className="grid grid-cols-3 gap-4">
-          <div className="card text-center">
-            <Euro size={24} className="mx-auto mb-2 text-yellow-500" />
-            <div className="text-2xl font-bold">{formatEuro(dossier.offre_assureur)}</div>
-            <div className="text-sm text-gray-500 mt-1">Offre assureur</div>
-          </div>
-          <div className="card text-center">
-            <Euro size={24} className="mx-auto mb-2 text-blue-500" />
-            <div className="text-2xl font-bold">{formatEuro(dossier.montant_reclame)}</div>
-            <div className="text-sm text-gray-500 mt-1">Montant réclamé</div>
-          </div>
-          <div className="card text-center">
-            <Euro size={24} className="mx-auto mb-2 text-green-500" />
-            <div className="text-2xl font-bold">{formatEuro(dossier.montant_obtenu)}</div>
-            <div className="text-sm text-gray-500 mt-1">Montant obtenu</div>
-          </div>
-          {dossier.offre_assureur && dossier.montant_obtenu && (
-            <div className="col-span-3 card bg-green-50 border-green-100">
-              <div className="text-center">
-                <div className="text-3xl font-bold text-green-600">
-                  +{formatEuro(dossier.montant_obtenu - dossier.offre_assureur)}
-                </div>
-                <div className="text-sm text-green-600 mt-1">
-                  au-dessus de l'offre initiale ({Math.round((dossier.montant_obtenu / dossier.offre_assureur - 1) * 100)}% de plus)
-                </div>
-              </div>
-            </div>
+              </Link>
+            ))
           )}
         </div>
       )}
 
-      {activeTab === 'documents' && (
-        <EmptyState label="Gestion documentaire — disponible prochainement" />
+      {/* Vue Pipeline (Kanban) */}
+      {vue === 'pipeline' && (
+        <div className="flex gap-3 overflow-x-auto pb-4">
+          {etapeGroups.map(etape => {
+            const dossiersEtape = filteredDossiers.filter(d => d.etape === etape)
+            return (
+              <div key={etape} className="flex-shrink-0 w-72">
+                <div className={`rounded-t-lg px-3 py-2 ${ETAPES_COULEURS[etape]} flex items-center justify-between`}>
+                  <span className="text-xs font-semibold">{ETAPES_LABELS[etape]}</span>
+                  <span className="text-xs font-bold">{dossiersEtape.length}</span>
+                </div>
+                <div className="bg-gray-50 rounded-b-lg p-2 space-y-2 min-h-[200px] border border-t-0 border-gray-200">
+                  {dossiersEtape.length === 0 && (
+                    <div className="text-center py-8 text-gray-300 text-xs">Vide</div>
+                  )}
+                  {dossiersEtape.map(d => (
+                    <Link key={d.id} href={`/dossiers/${d.id}`}>
+                      <div className="bg-white rounded-lg p-3 shadow-sm border border-gray-100 hover:shadow-md transition-shadow cursor-pointer">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="font-medium text-sm text-gray-900 truncate">{d.client_nom} {d.client_prenom}</span>
+                          {d.priorite === 'urgente' && <span className="w-2 h-2 bg-red-500 rounded-full flex-shrink-0" />}
+                          {d.priorite === 'haute' && <span className="w-2 h-2 bg-orange-500 rounded-full flex-shrink-0" />}
+                        </div>
+                        <div className="text-xs text-gray-400 font-mono">{d.reference}</div>
+                        <div className="text-xs text-gray-400 mt-1">{TYPE_ACCIDENT_LABELS[d.type_accident]}</div>
+                        <div className="flex items-center justify-between mt-2">
+                          {d.juriste_nom && <span className="text-[10px] text-gray-400">{d.juriste_nom}</span>}
+                          {d.jours_inactif >= 7 && (
+                            <span className="text-[10px] text-orange-500 flex items-center gap-0.5">
+                              <Clock size={8} /> {d.jours_inactif}j
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </Link>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+        </div>
       )}
     </div>
   )
-}
-
-function InfoRow({ label, value, icon }: { label: string; value?: string | null; icon?: React.ReactNode }) {
-  return (
-    <div>
-      <div className="text-xs text-gray-400 font-medium">{label}</div>
-      <div className="text-sm text-gray-700 mt-0.5 flex items-center gap-1">
-        {icon}
-        {value ?? <span className="text-gray-300">—</span>}
-      </div>
-    </div>
-  )
-}
-
-function Flag({ label, active, danger }: { label: string; active: boolean; danger?: boolean }) {
-  return (
-    <div className={`flex items-center justify-between px-3 py-2 rounded-lg ${active ? (danger ? 'bg-red-50' : 'bg-green-50') : 'bg-gray-50'}`}>
-      <span className="text-xs text-gray-600">{label}</span>
-      <span className={`text-xs font-medium ${active ? (danger ? 'text-red-600' : 'text-green-600') : 'text-gray-300'}`}>
-        {active ? '✓ Oui' : 'Non'}
-      </span>
-    </div>
-  )
-}
-
-function EmptyState({ label }: { label: string }) {
-  return <div className="text-center py-12 text-gray-400 text-sm">{label}</div>
-}
-
-function formatEuro(value?: number | null) {
-  if (!value) return '—'
-  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(value)
 }
