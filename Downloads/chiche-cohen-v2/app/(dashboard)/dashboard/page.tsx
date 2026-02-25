@@ -216,6 +216,50 @@ export default function Dashboard() {
 
         {/* Colonne droite */}
         <div className="space-y-6">
+          {/* Agenda cette semaine */}
+          <div className="card">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="font-semibold text-sm flex items-center gap-2"><Calendar size={15} className="text-cabinet-blue" />Cette semaine</h2>
+            </div>
+            {(() => {
+              const now = new Date()
+              const debutSemaine = new Date(now); debutSemaine.setHours(0,0,0,0); debutSemaine.setDate(now.getDate() - now.getDay() + 1)
+              const finSemaine = new Date(debutSemaine); finSemaine.setDate(debutSemaine.getDate() + 6)
+              const evenements = [
+                ...audiences.filter(a => { const d = new Date(a.date_audience); return d >= debutSemaine && d <= finSemaine }).map(a => ({ date: a.date_audience, type: '⚖️', label: `${a.dossier?.client?.nom} — ${a.nature || 'Audience'}`, href: `/dossiers/${a.dossier_id}` })),
+                ...expertises.filter(e => { const d = new Date(e.date_expertise); return d >= debutSemaine && d <= finSemaine }).map(e => ({ date: e.date_expertise, type: '🏥', label: `${e.dossier?.client?.nom} — Expertise`, href: `/dossiers/${e.dossier_id}` })),
+              ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime())
+
+              const jours = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
+              return (
+                <div className="space-y-1">
+                  {jours.map((j, i) => {
+                    const jour = new Date(debutSemaine); jour.setDate(debutSemaine.getDate() + i)
+                    const isToday = jour.toDateString() === now.toDateString()
+                    const eventsJour = evenements.filter(e => new Date(e.date).toDateString() === jour.toDateString())
+                    return (
+                      <div key={j} className={`flex items-start gap-2 py-1.5 px-2 rounded-lg ${isToday ? 'bg-blue-50' : ''}`}>
+                        <div className={`text-xs font-medium w-8 flex-shrink-0 ${isToday ? 'text-cabinet-blue font-bold' : 'text-gray-400'}`}>
+                          {j}<br/><span className={`text-xs ${isToday ? 'text-cabinet-blue' : 'text-gray-300'}`}>{jour.getDate()}</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          {eventsJour.length > 0 ? eventsJour.map((e, ei) => (
+                            <Link key={ei} href={e.href}>
+                              <div className="text-xs text-gray-700 hover:text-cabinet-blue truncate">{e.type} {e.label}</div>
+                            </Link>
+                          )) : (
+                            <div className="text-xs text-gray-200">—</div>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                  {evenements.length === 0 && <p className="text-xs text-gray-400 text-center py-2">Semaine libre</p>}
+                </div>
+              )
+            })()}
+          </div>
+
           {/* Audiences à venir */}
           <div className="card">
             <div className="flex items-center justify-between mb-4">
