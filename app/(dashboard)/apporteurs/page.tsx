@@ -1,7 +1,8 @@
 'use client'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { Users, Plus, Briefcase, Phone, Mail } from 'lucide-react'
+import { Users, Plus, Briefcase, Phone, Mail, Search, TrendingUp, ChevronRight } from 'lucide-react'
+import Link from 'next/link'
 
 export default function ApporteursPage() {
   const [apporteurs, setApporteurs] = useState<any[]>([])
@@ -9,6 +10,7 @@ export default function ApporteursPage() {
   const [showForm, setShowForm] = useState(false)
   const [form, setForm] = useState({ nom: '', prenom: '', type: 'partenaire', profession: '', email: '', telephone: '', taux_commission: '10' })
   const [saving, setSaving] = useState(false)
+  const [recherche, setRecherche] = useState('')
 
   const load = async () => {
     const { data } = await supabase.from('apporteurs').select('*, dossiers:dossiers(id)').eq('actif', true).order('nom')
@@ -26,6 +28,12 @@ export default function ApporteursPage() {
     setSaving(false)
   }
 
+  const filtres = apporteurs.filter(a => {
+    if (!recherche) return true
+    const q = recherche.toLowerCase()
+    return a.nom?.toLowerCase().includes(q) || a.prenom?.toLowerCase().includes(q) || a.profession?.toLowerCase().includes(q)
+  })
+
   if (loading) return <div className="flex items-center justify-center h-screen"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cabinet-blue" /></div>
 
   return (
@@ -36,6 +44,28 @@ export default function ApporteursPage() {
           <p className="text-gray-500 text-sm mt-1">{apporteurs.length} apporteur{apporteurs.length > 1 ? 's' : ''} actif{apporteurs.length > 1 ? 's' : ''}</p>
         </div>
         <button onClick={() => setShowForm(!showForm)} className="btn-primary flex items-center gap-2"><Plus size={16} />Ajouter</button>
+      </div>
+
+      {/* Stats rapides */}
+      <div className="grid grid-cols-3 gap-4 mb-6">
+        <div className="card flex items-center gap-3">
+          <div className="p-2.5 rounded-xl bg-blue-50"><Briefcase size={18} className="text-cabinet-blue" /></div>
+          <div><div className="text-xl font-bold">{apporteurs.length}</div><div className="text-xs text-gray-500">Apporteurs actifs</div></div>
+        </div>
+        <div className="card flex items-center gap-3">
+          <div className="p-2.5 rounded-xl bg-green-50"><TrendingUp size={18} className="text-green-600" /></div>
+          <div><div className="text-xl font-bold">{apporteurs.reduce((s, a) => s + (a.dossiers?.length || 0), 0)}</div><div className="text-xs text-gray-500">Dossiers apportés</div></div>
+        </div>
+        <div className="card flex items-center gap-3">
+          <div className="p-2.5 rounded-xl bg-purple-50"><Users size={18} className="text-purple-600" /></div>
+          <div><div className="text-xl font-bold">{apporteurs.filter(a => (a.dossiers?.length || 0) >= 3).length}</div><div className="text-xs text-gray-500">Partenaires actifs (3+ dossiers)</div></div>
+        </div>
+      </div>
+
+      {/* Recherche */}
+      <div className="relative max-w-sm mb-5">
+        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+        <input type="text" placeholder="Rechercher..." value={recherche} onChange={e => setRecherche(e.target.value)} className="input pl-9 w-full" />
       </div>
 
       {showForm && (
@@ -65,8 +95,9 @@ export default function ApporteursPage() {
       )}
 
       <div className="grid grid-cols-2 gap-4">
-        {apporteurs.map(a => (
-          <div key={a.id} className="card flex items-center gap-4">
+        {filtres.map(a => (
+          <Link key={a.id} href={`/apporteurs/${a.id}`}>
+          <div className="card flex items-center gap-4 hover:shadow-md transition-shadow cursor-pointer">
             <div className="w-12 h-12 rounded-full bg-blue-50 flex items-center justify-center text-lg font-bold text-cabinet-blue flex-shrink-0">
               {a.nom[0]}
             </div>
@@ -83,7 +114,8 @@ export default function ApporteursPage() {
               <div className="text-xs text-gray-400">dossiers</div>
               <div className="text-xs text-gray-400 mt-0.5">{a.taux_commission}% commission</div>
             </div>
-          </div>
+            <ChevronRight size={16} className="text-gray-200 ml-auto" />
+          </div></Link>
         ))}
         {apporteurs.length === 0 && (
           <div className="col-span-2 card text-center py-12 text-gray-400">

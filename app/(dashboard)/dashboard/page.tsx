@@ -25,6 +25,7 @@ export default function Dashboard() {
   const [alertes, setAlertes] = useState<any[]>([])
   const [expertises, setExpertises] = useState<any[]>([])
   const [pipeline, setPipeline] = useState<any[]>([])
+  const [relances, setRelances] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -34,13 +35,14 @@ export default function Dashboard() {
       const in7 = new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 10)
       const ago30 = new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10)
 
-      const [statsR, dossiersR, audiencesR, expertisesR, alertesR, pipeR] = await Promise.all([
+      const [statsR, dossiersR, audiencesR, expertisesR, alertesR, pipeR, relancesR] = await Promise.all([
         supabase.from('dossiers').select('etape, montant_obtenu, honoraires_resultat, honoraires_fixes, created_at').neq('etape', 'archive'),
         supabase.from('dossiers').select('id, reference, etape, priorite, updated_at, client:clients(nom, prenom)').neq('etape', 'archive').order('updated_at', { ascending: false }).limit(6),
         supabase.from('audiences').select('id, date_audience, nature, tribunal, dossier_id, dossier:dossiers(reference, client:clients(nom, prenom))').gte('date_audience', today).lte('date_audience', in30).order('date_audience').limit(8),
         supabase.from('expertises').select('id, date_expertise, type, dossier_id, dossier:dossiers(reference, client:clients(nom, prenom))').gte('date_expertise', today).lte('date_expertise', in7).order('date_expertise').limit(5),
         supabase.from('dossiers').select('id, reference, updated_at, client:clients(nom, prenom), etape').neq('etape', 'archive').neq('etape', 'encaissement').lte('updated_at', ago30).order('updated_at').limit(5),
         supabase.from('dossiers').select('etape').neq('etape', 'archive'),
+        supabase.from('relances').select('id, type, motif, statut, created_at, dossier:dossiers(id, reference, client:clients(nom, prenom))').eq('statut', 'en_attente').order('created_at').limit(5),
       ])
 
       if (statsR.data) {
@@ -56,6 +58,7 @@ export default function Dashboard() {
       if (audiencesR.data) setAudiences(audiencesR.data)
       if (expertisesR.data) setExpertises(expertisesR.data)
       if (alertesR.data) setAlertes(alertesR.data)
+      if (relancesR.data) setRelances(relancesR.data)
       if (pipeR.data) {
         const counts: Record<string, number> = {}
         pipeR.data.forEach((d: any) => { counts[d.etape] = (counts[d.etape] || 0) + 1 })
