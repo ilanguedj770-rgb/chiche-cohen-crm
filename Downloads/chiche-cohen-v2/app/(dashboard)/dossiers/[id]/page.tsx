@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { ETAPES_LABELS, ETAPES_COULEURS, TYPE_ACCIDENT_LABELS, type Dossier, type Client, type Etape, type Expertise, type Audience } from '@/lib/types'
-import { ArrowLeft, Phone, Mail, Calendar, Scale, Stethoscope, Euro, ChevronRight, Plus, Save, AlertTriangle, FileText, Clock, Gavel, User } from 'lucide-react'
+import { ArrowLeft, Phone, Mail, Calendar, Scale, Stethoscope, Euro, ChevronRight, Plus, Save, AlertTriangle, FileText, Clock, Gavel, User, Upload, Download, Trash2 } from 'lucide-react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 
@@ -33,7 +33,9 @@ export default function DossierDetail() {
   const [notes, setNotes] = useState<any[]>([])
   const [historique, setHistorique] = useState<any[]>([])
   const [utilisateurs, setUtilisateurs] = useState<any[]>([])
-  const [tab, setTab] = useState<'detail' | 'procedure' | 'expertises' | 'audiences' | 'financier' | 'notes' | 'historique'>('detail')
+  const [documents, setDocuments] = useState<any[]>([])
+  const [uploading, setUploading] = useState(false)
+  const [tab, setTab] = useState<'detail' | 'procedure' | 'expertises' | 'audiences' | 'financier' | 'notes' | 'historique' | 'documents'>('detail')
   const [loading, setLoading] = useState(true)
   const [noteTexte, setNoteTexte] = useState('')
   const [savingNote, setSavingNote] = useState(false)
@@ -53,6 +55,7 @@ export default function DossierDetail() {
           supabase.from('notes').select('*, auteur:utilisateurs(nom, prenom)').eq('dossier_id', id).order('created_at', { ascending: false }),
           supabase.from('historique_etapes').select('*, utilisateur:utilisateurs(nom, prenom)').eq('dossier_id', id).order('created_at', { ascending: false }),
           supabase.from('utilisateurs').select('id, nom, prenom, role').eq('actif', true),
+          supabase.from('documents').select('*').eq('dossier_id', id).order('created_at', { ascending: false }),
         ])
         if (c) setClient(c)
         if (e) setExpertises(e)
@@ -62,6 +65,9 @@ export default function DossierDetail() {
         if (h) setHistorique(h)
         if (u) setUtilisateurs(u)
       }
+      // docs chargés via query 7
+      const { data: docs7 } = await supabase.from('documents').select('*').eq('dossier_id', id).order('created_at', { ascending: false })
+      if (docs7) setDocuments(docs7)
       setLoading(false)
     }
     load()
@@ -173,6 +179,7 @@ export default function DossierDetail() {
           ['financier', 'Financier'],
           ['notes', `Notes (${notes.length})`],
           ['historique', 'Historique'],
+          ['documents', `Documents (${documents.length})`],
         ].map(([t, label]) => (
           <button key={t} onClick={() => setTab(t as any)}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${tab === t ? 'border-cabinet-blue text-cabinet-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
@@ -483,6 +490,87 @@ export default function DossierDetail() {
     </div>
   )
 }
+
+      {/* Onglet Documents */}
+      {tab === 'documents' && (
+        <div className="space-y-4">
+          <div className="card">
+            <h3 className="font-semibold mb-3 text-sm">Ajouter un document</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs text-gray-500 font-medium block mb-1">Type</label>
+                <select id="doc-type" className="input-field">
+                  {['constat_police','certificat_medical','hospitalisation','bulletin_salaire','avis_imposition','rapport_expertise','courrier_assureur','mandat','conclusions','jugement','autre'].map(t => (
+                    <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>
+                  ))}
+                </select>
+              </div>
+              <div className="flex items-end">
+                <label className={`flex items-center gap-2 px-4 py-2.5 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:border-cabinet-blue hover:bg-blue-50 transition-colors w-full justify-center ${uploading ? 'opacity-50 pointer-events-none' : ''}`}>
+                  <Upload size={16} className="text-gray-400" />
+                  <span className="text-sm text-gray-500">{uploading ? 'Upload...' : 'Choisir un fichier'}</span>
+                  <input type="file" className="hidden" disabled={uploading} onChange={async (e) => {
+                    const file = e.target.files?.[0]
+                    if (!file) return
+                    setUploading(true)
+                    try {
+                      const docType = (document.getElementById('doc-type') as HTMLSelectElement)?.value || 'autre'
+                      const filePath = `${id}/${Date.now()}_${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
+                      const { error: upError } = await supabase.storage.from('documents').upload(filePath, file)
+                      if (!upError) {
+                        const { data: urlData } = supabase.storage.from('documents').getPublicUrl(filePath)
+                        await supabase.from('documents').insert({
+                          dossier_id: id, type_document: docType,
+                          nom_fichier: file.name, url_stockage: urlData.publicUrl,
+                          taille_octets: file.size, uploade_par: 'cabinet'
+                        })
+                        const { data: freshDocs } = await supabase.from('documents').select('*').eq('dossier_id', id).order('created_at', { ascending: false })
+                        if (freshDocs) setDocuments(freshDocs)
+                      }
+                    } finally { setUploading(false) }
+                  }} />
+                </label>
+              </div>
+            </div>
+          </div>
+
+          {documents.length === 0 ? (
+            <div className="card text-center py-12 text-gray-400">
+              <FileText size={40} className="mx-auto mb-3 opacity-20" />
+              <p>Aucun document pour ce dossier</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              {documents.map(doc => (
+                <div key={doc.id} className="card flex items-center gap-3 border-l-4 border-blue-200">
+                  <div className="w-10 h-10 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">
+                    <FileText size={18} className="text-cabinet-blue" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-sm font-medium truncate">{doc.nom_fichier}</div>
+                    <div className="text-xs text-gray-400">{doc.type_document?.replace(/_/g, ' ')}</div>
+                    <div className="text-xs text-gray-400">{doc.taille_octets ? `${Math.round(doc.taille_octets / 1024)} Ko • ` : ''}{new Date(doc.created_at).toLocaleDateString('fr-FR')}</div>
+                  </div>
+                  <div className="flex gap-1 flex-shrink-0">
+                    {doc.url_stockage && (
+                      <a href={doc.url_stockage} target="_blank" rel="noreferrer"
+                        className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 hover:text-cabinet-blue transition-colors">
+                        <Download size={14} />
+                      </a>
+                    )}
+                    <button onClick={async () => {
+                      await supabase.from('documents').delete().eq('id', doc.id)
+                      setDocuments(prev => prev.filter(d => d.id !== doc.id))
+                    }} className="p-1.5 rounded-lg hover:bg-red-50 text-gray-400 hover:text-red-500 transition-colors">
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
 function Info({ label, value, icon }: { label: string; value?: string | null; icon?: React.ReactNode }) {
   return (
