@@ -1,397 +1,329 @@
 'use client'
 import { useEffect, useState, useMemo } from 'react'
-import { supabase } from '@/lib/supabase'
-import { ChevronLeft, ChevronRight, Calendar, Stethoscope, Scale, Clock, AlertTriangle } from 'lucide-react'
 import Link from 'next/link'
+import { supabase } from '@/lib/supabase'
+import { ChevronLeft, ChevronRight, Calendar, Scale, Stethoscope, Bell, Clock, MapPin, User } from 'lucide-react'
 
-type VueMode = 'mois' | 'semaine' | 'liste'
+type EventType = 'audience' | 'expertise' | 'echeance' | 'tache'
 
-interface Evenement {
+interface CalEvent {
   id: string
-  type: 'audience' | 'expertise' | 'echeance'
+  type: EventType
   date: string
   heure?: string
   titre: string
-  sous_titre?: string
+  sousTitre?: string
+  lieu?: string
   dossier_id?: string
   dossier_ref?: string
-  couleur: string
-  bg: string
-  urgent?: boolean
+  client_nom?: string
 }
 
-const JOURS = ['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim']
-const MOIS_LABELS = ['Janvier','Février','Mars','Avril','Mai','Juin','Juillet','Août','Septembre','Octobre','Novembre','Décembre']
+const TYPE_CONFIG = {
+  audience:  { label: 'Audience',   color: 'text-blue-700',   bg: 'bg-blue-50',   border: 'border-blue-300',  icon: Scale },
+  expertise: { label: 'Expertise',  color: 'text-purple-700', bg: 'bg-purple-50', border: 'border-purple-300', icon: Stethoscope },
+  echeance:  { label: 'Échéance',   color: 'text-orange-700', bg: 'bg-orange-50', border: 'border-orange-300', icon: Bell },
+  tache:     { label: 'Tâche',      color: 'text-green-700',  bg: 'bg-green-50',  border: 'border-green-300',  icon: Clock },
+} as const
 
-function startOfWeek(d: Date): Date {
-  const day = d.getDay()
-  const diff = (day === 0 ? -6 : 1 - day)
-  const r = new Date(d); r.setDate(d.getDate() + diff); r.setHours(0,0,0,0); return r
+function formatMonthYear(date: Date) {
+  return date.toLocaleDateString('fr-FR', { month: 'long', year: 'numeric' })
 }
-function addDays(d: Date, n: number): Date { const r = new Date(d); r.setDate(r.getDate() + n); return r }
-function toISO(d: Date): string { return d.toISOString().slice(0,10) }
-function joursAvant(dateStr: string): number {
-  return Math.ceil((new Date(dateStr).setHours(0,0,0,0) - new Date().setHours(0,0,0,0)) / 86400000)
+function getDaysInMonth(year: number, month: number) {
+  return new Date(year, month + 1, 0).getDate()
 }
-function badgeJours(j: number) {
-  if (j < 0)  return { label: `Dépassé ${Math.abs(j)}j`, cls: 'bg-red-100 text-red-700 font-bold' }
-  if (j === 0) return { label: "Aujourd'hui", cls: 'bg-red-500 text-white font-bold' }
-  if (j <= 2)  return { label: `J-${j}`, cls: 'bg-red-100 text-red-700 font-bold' }
-  if (j <= 7)  return { label: `J-${j}`, cls: 'bg-orange-100 text-orange-700 font-semibold' }
-  if (j <= 15) return { label: `J-${j}`, cls: 'bg-yellow-100 text-yellow-700' }
-  return { label: `J-${j}`, cls: 'bg-blue-50 text-blue-600' }
+function getFirstDayOfWeek(year: number, month: number) {
+  const d = new Date(year, month, 1).getDay()
+  return d === 0 ? 6 : d - 1
 }
 
 export default function AgendaPage() {
-  const [vue, setVue] = useState<VueMode>('mois')
-  const [curseur, setCurseur] = useState(new Date())
-  const [evenements, setEvenements] = useState<Evenement[]>([])
+  const today = new Date()
+  const [currentDate, setCurrentDate] = useState(new Date(today.getFullYear(), today.getMonth(), 1))
+  const [events, setEvents] = useState<CalEvent[]>([])
   const [loading, setLoading] = useState(true)
-  const [filtres, setFiltres] = useState({ audiences: true, expertises: true, echeances: true })
-  const [selected, setSelected] = useState<Evenement | null>(null)
+  const [selectedDay, setSelectedDay] = useState<number | null>(today.getDate())
+  const [viewMode, setViewMode] = useState<'mois' | 'liste'>('mois')
+  const [filter, setFilter] = useState<EventType | 'tous'>('tous')
 
-  useEffect(() => {
-    async function load() {
-      setLoading(true)
-      const from = new Date(curseur.getFullYear(), curseur.getMonth() - 1, 1).toISOString().slice(0,10)
-      const to   = new Date(curseur.getFullYear(), curseur.getMonth() + 2, 0).toISOString().slice(0,10)
+  const year = currentDate.getFullYear()
+  const month = currentDate.getMonth()
 
-      const [{ data: aud }, { data: exp }, { data: proc }] = await Promise.all([
-        supabase.from('audiences')
-          .select('id, date_audience, nature, tribunal, dossier_id, dossier:dossiers(reference, client:clients(nom, prenom))')
-          .gte('date_audience', from).lte('date_audience', to).order('date_audience'),
-        supabase.from('expertises')
-          .select('id, date_expertise, heure_expertise, type, lieu_expertise, expert_nom, dossier_id, dossier:dossiers(reference, client:clients(nom, prenom))')
-          .gte('date_expertise', from).lte('date_expertise', to).order('date_expertise'),
-        supabase.from('procedures_judiciaires')
-          .select('id, date_delibere, prochaine_audience, tribunal, decision, dossier_id, dossier:dossiers(reference, client:clients(nom, prenom))')
-          .or(`date_delibere.gte.${from},prochaine_audience.gte.${from}`),
-      ])
+  useEffect(() => { loadEvents() }, [year, month])
 
-      const evts: Evenement[] = []
+  async function loadEvents() {
+    setLoading(true)
+    const pad = (n: number) => String(n).padStart(2, '0')
+    const from = `${year}-${pad(month + 1)}-01`
+    const to = `${year}-${pad(month + 1)}-${getDaysInMonth(year, month)}`
 
-      aud?.forEach((a: any) => {
-        const j = joursAvant(a.date_audience)
-        evts.push({
-          id: `aud-${a.id}`, type: 'audience',
-          date: a.date_audience.slice(0,10),
-          titre: `${a.dossier?.client?.nom || ''} ${a.dossier?.client?.prenom || ''}`.trim() || 'Audience',
-          sous_titre: `${(a.nature || '').replace(/_/g,' ')}${a.tribunal ? ' • ' + a.tribunal : ''}`,
-          dossier_id: a.dossier_id, dossier_ref: a.dossier?.reference,
-          couleur: 'text-blue-700', bg: j <= 2 ? 'bg-red-100' : j <= 7 ? 'bg-orange-100' : 'bg-blue-100',
-          urgent: j <= 7,
-        })
+    const [audRes, expRes, tachRes] = await Promise.all([
+      supabase.from('audiences')
+        .select('id, date_audience, nature, tribunal, salle, dossier_id, dossiers(reference, clients(nom, prenom))')
+        .gte('date_audience', from).lte('date_audience', to + 'T23:59:59'),
+      supabase.from('expertises')
+        .select('id, date_expertise, heure_expertise, type, lieu_expertise, expert_nom, dossier_id, dossiers(reference, clients(nom, prenom))')
+        .gte('date_expertise', from).lte('date_expertise', to),
+      supabase.from('taches')
+        .select('id, date_echeance, titre, priorite, statut, dossier_id, dossiers(reference, clients(nom, prenom))')
+        .gte('date_echeance', from).lte('date_echeance', to)
+        .neq('statut', 'terminee').neq('statut', 'annulee'),
+    ])
+
+    const all: CalEvent[] = []
+
+    for (const a of (audRes.data as any[] || [])) {
+      const client = a.dossiers?.clients
+      all.push({
+        id: a.id, type: 'audience',
+        date: a.date_audience?.slice(0, 10),
+        heure: a.date_audience?.slice(11, 16),
+        titre: a.nature || 'Audience',
+        sousTitre: a.tribunal,
+        lieu: a.salle,
+        dossier_id: a.dossier_id,
+        dossier_ref: a.dossiers?.reference,
+        client_nom: client ? `${client.prenom} ${client.nom}` : undefined,
       })
-
-      exp?.forEach((e: any) => {
-        const j = joursAvant(e.date_expertise)
-        evts.push({
-          id: `exp-${e.id}`, type: 'expertise',
-          date: e.date_expertise.slice(0,10),
-          heure: e.heure_expertise,
-          titre: `${e.dossier?.client?.nom || ''} ${e.dossier?.client?.prenom || ''}`.trim() || 'Expertise',
-          sous_titre: `${e.type || ''}${e.expert_nom ? ' • ' + e.expert_nom : ''}`,
-          dossier_id: e.dossier_id, dossier_ref: e.dossier?.reference,
-          couleur: 'text-purple-700', bg: j <= 2 ? 'bg-red-100' : j <= 7 ? 'bg-orange-100' : 'bg-purple-100',
-          urgent: j <= 7,
-        })
-      })
-
-      proc?.forEach((p: any) => {
-        if (p.date_delibere) {
-          const j = joursAvant(p.date_delibere)
-          evts.push({
-            id: `del-${p.id}`, type: 'echeance',
-            date: p.date_delibere.slice(0,10),
-            titre: `Délibéré — ${p.dossier?.client?.nom || ''}`,
-            sous_titre: p.tribunal || '',
-            dossier_id: p.dossier_id, dossier_ref: p.dossier?.reference,
-            couleur: 'text-rose-700', bg: j <= 7 ? 'bg-red-100' : 'bg-rose-100',
-            urgent: j <= 7,
-          })
-        }
-        if (p.prochaine_audience && p.decision === 'en_attente') {
-          evts.push({
-            id: `paud-${p.id}`, type: 'audience',
-            date: p.prochaine_audience.slice(0,10),
-            titre: `Audience — ${p.dossier?.client?.nom || ''}`,
-            sous_titre: p.tribunal || '',
-            dossier_id: p.dossier_id, dossier_ref: p.dossier?.reference,
-            couleur: 'text-blue-700', bg: 'bg-blue-100',
-          })
-        }
-      })
-
-      setEvenements(evts)
-      setLoading(false)
     }
-    load()
-  }, [curseur])
 
-  const evtsFiltres = useMemo(() => evenements.filter(e => {
-    if (e.type === 'audience'  && !filtres.audiences)  return false
-    if (e.type === 'expertise' && !filtres.expertises) return false
-    if (e.type === 'echeance'  && !filtres.echeances)  return false
-    return true
-  }), [evenements, filtres])
+    for (const e of (expRes.data as any[] || [])) {
+      const client = e.dossiers?.clients
+      all.push({
+        id: e.id, type: 'expertise',
+        date: e.date_expertise,
+        heure: e.heure_expertise?.slice(0, 5),
+        titre: e.type === 'judiciaire' ? 'Expertise judiciaire' : e.type === 'amiable' ? 'Expertise amiable' : 'Sapiteur',
+        sousTitre: e.expert_nom,
+        lieu: e.lieu_expertise,
+        dossier_id: e.dossier_id,
+        dossier_ref: e.dossiers?.reference,
+        client_nom: client ? `${client.prenom} ${client.nom}` : undefined,
+      })
+    }
 
-  const evtsParDate = useMemo(() => {
-    const map: Record<string, Evenement[]> = {}
-    evtsFiltres.forEach(e => { (map[e.date] = map[e.date] || []).push(e) })
-    return map
-  }, [evtsFiltres])
+    for (const t of (tachRes.data as any[] || [])) {
+      const client = t.dossiers?.clients
+      all.push({
+        id: t.id, type: 'tache',
+        date: t.date_echeance,
+        titre: t.titre,
+        sousTitre: t.priorite === 'urgente' ? '🔴 Urgente' : t.priorite === 'haute' ? '🟠 Haute' : undefined,
+        dossier_id: t.dossier_id,
+        dossier_ref: t.dossiers?.reference,
+        client_nom: client ? `${client.prenom} ${client.nom}` : undefined,
+      })
+    }
 
-  const naviguer = (dir: -1 | 1) => {
-    const d = new Date(curseur)
-    if (vue === 'semaine') d.setDate(d.getDate() + dir * 7)
-    else d.setMonth(d.getMonth() + dir)
-    setCurseur(d)
+    all.sort((a, b) => {
+      const d = a.date.localeCompare(b.date)
+      return d !== 0 ? d : (a.heure || '00:00').localeCompare(b.heure || '00:00')
+    })
+    setEvents(all)
+    setLoading(false)
   }
 
-  const titre = vue === 'semaine'
-    ? (() => { const lun = startOfWeek(curseur); const dim = addDays(lun, 6)
-        return `${lun.getDate()} – ${dim.getDate()} ${MOIS_LABELS[dim.getMonth()]} ${dim.getFullYear()}` })()
-    : `${MOIS_LABELS[curseur.getMonth()]} ${curseur.getFullYear()}`
+  const filtered = useMemo(() =>
+    filter === 'tous' ? events : events.filter(e => e.type === filter),
+    [events, filter]
+  )
 
-  const urgents = evtsFiltres.filter(e => e.urgent && new Date(e.date) >= new Date()).length
+  const byDay = useMemo(() => {
+    const map: Record<number, CalEvent[]> = {}
+    filtered.forEach(e => {
+      const day = parseInt(e.date.slice(8))
+      if (!map[day]) map[day] = []
+      map[day].push(e)
+    })
+    return map
+  }, [filtered])
+
+  const selectedEvents = useMemo(() =>
+    selectedDay !== null ? filtered.filter(e => parseInt(e.date.slice(8)) === selectedDay) : [],
+    [filtered, selectedDay]
+  )
+
+  const daysInMonth = getDaysInMonth(year, month)
+  const firstDay = getFirstDayOfWeek(year, month)
+  const cells: (number | null)[] = Array(firstDay).fill(null).concat(Array.from({ length: daysInMonth }, (_, i) => i + 1))
+  while (cells.length % 7 !== 0) cells.push(null)
+
+  const stats = {
+    audiences: events.filter(e => e.type === 'audience').length,
+    expertises: events.filter(e => e.type === 'expertise').length,
+    taches: events.filter(e => e.type === 'tache').length,
+  }
 
   return (
-    <div className="p-6 flex flex-col" style={{ minHeight: 'calc(100vh - 64px)' }}>
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
+    <div className="p-6 max-w-7xl mx-auto">
+      <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold flex items-center gap-2">
-            <Calendar size={22} className="text-cabinet-blue" /> Agenda
-          </h1>
-          {urgents > 0 && (
-            <p className="text-sm text-orange-600 font-medium mt-0.5 flex items-center gap-1">
-              <AlertTriangle size={13} /> {urgents} échéance{urgents > 1 ? 's' : ''} urgente{urgents > 1 ? 's' : ''} (≤ 7j)
-            </p>
-          )}
+          <h1 className="text-2xl font-bold text-gray-900">Agenda</h1>
+          <p className="text-sm text-gray-500 mt-0.5">Vue centralisée des audiences, expertises et tâches</p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="flex bg-gray-100 rounded-lg p-1 gap-1">
-            {(['mois', 'semaine', 'liste'] as VueMode[]).map(v => (
-              <button key={v} onClick={() => setVue(v)}
-                className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors capitalize ${vue === v ? 'bg-white shadow text-gray-800' : 'text-gray-500 hover:text-gray-700'}`}>
-                {v}
-              </button>
-            ))}
-          </div>
-          <div className="flex items-center gap-1">
-            <button onClick={() => naviguer(-1)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500"><ChevronLeft size={18} /></button>
-            <button onClick={() => setCurseur(new Date())} className="px-3 py-1 text-xs font-medium text-cabinet-blue hover:bg-blue-50 rounded-lg">Auj.</button>
-            <button onClick={() => naviguer(1)} className="p-1.5 rounded-lg hover:bg-gray-100 text-gray-500"><ChevronRight size={18} /></button>
-          </div>
-          <span className="font-semibold text-gray-700 min-w-[200px] text-right">{titre}</span>
+        <div className="flex items-center gap-2">
+          <button onClick={() => setViewMode('mois')}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${viewMode === 'mois' ? 'bg-cabinet-blue text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+            Mois
+          </button>
+          <button onClick={() => setViewMode('liste')}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${viewMode === 'liste' ? 'bg-cabinet-blue text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+            Liste
+          </button>
         </div>
       </div>
 
-      {/* Filtres */}
-      <div className="flex items-center gap-2 mb-4">
-        <span className="text-xs text-gray-400 font-medium">Afficher :</span>
+      {/* Stats */}
+      <div className="grid grid-cols-3 gap-4 mb-6">
         {([
-          ['audiences', 'Audiences', 'bg-blue-100 text-blue-700 border-blue-300'],
-          ['expertises', 'Expertises', 'bg-purple-100 text-purple-700 border-purple-300'],
-          ['echeances', 'Délibérés', 'bg-rose-100 text-rose-700 border-rose-300'],
-        ] as [keyof typeof filtres, string, string][]).map(([k, l, on]) => (
-          <button key={k} onClick={() => setFiltres(f => ({ ...f, [k]: !f[k] }))}
-            className={`px-3 py-1 rounded-full text-xs font-medium border transition-all ${filtres[k] ? `${on}` : 'bg-white text-gray-400 border-gray-200'}`}>
-            {l}
+          { label: 'Audiences', count: stats.audiences, type: 'audience', icon: Scale, color: 'text-blue-600', bg: 'bg-blue-50' },
+          { label: 'Expertises', count: stats.expertises, type: 'expertise', icon: Stethoscope, color: 'text-purple-600', bg: 'bg-purple-50' },
+          { label: 'Tâches', count: stats.taches, type: 'tache', icon: Clock, color: 'text-green-600', bg: 'bg-green-50' },
+        ] as const).map(s => (
+          <button key={s.type} onClick={() => setFilter(filter === s.type ? 'tous' : s.type)}
+            className={`card p-4 flex items-center gap-3 text-left transition-all hover:shadow-md ${filter === s.type ? 'ring-2 ring-cabinet-blue' : ''}`}>
+            <div className={`w-10 h-10 rounded-xl ${s.bg} flex items-center justify-center`}>
+              <s.icon size={18} className={s.color} />
+            </div>
+            <div>
+              <div className="text-2xl font-bold text-gray-900">{s.count}</div>
+              <div className="text-xs text-gray-500">{s.label} ce mois</div>
+            </div>
           </button>
         ))}
-        <span className="ml-auto text-xs text-gray-400">{evtsFiltres.length} événement{evtsFiltres.length > 1 ? 's' : ''}</span>
+      </div>
+
+      {/* Navigation mois */}
+      <div className="flex items-center justify-between mb-4">
+        <button onClick={() => setCurrentDate(new Date(year, month - 1, 1))} className="p-2 rounded-lg hover:bg-gray-100">
+          <ChevronLeft size={18} className="text-gray-600" />
+        </button>
+        <h2 className="text-lg font-semibold text-gray-900 capitalize">{formatMonthYear(currentDate)}</h2>
+        <button onClick={() => setCurrentDate(new Date(year, month + 1, 1))} className="p-2 rounded-lg hover:bg-gray-100">
+          <ChevronRight size={18} className="text-gray-600" />
+        </button>
       </div>
 
       {loading ? (
-        <div className="flex-1 flex items-center justify-center">
+        <div className="flex items-center justify-center h-64">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cabinet-blue" />
         </div>
-      ) : (
-        <div className="flex-1 overflow-auto">
-          {vue === 'mois'    && <VueMois    curseur={curseur} evtsParDate={evtsParDate} onSelect={setSelected} />}
-          {vue === 'semaine' && <VueSemaine curseur={curseur} evtsParDate={evtsParDate} onSelect={setSelected} />}
-          {vue === 'liste'   && <VueListe   curseur={curseur} evtsFiltres={evtsFiltres} onSelect={setSelected} />}
-        </div>
-      )}
-
-      {/* Modal détail */}
-      {selected && (
-        <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4" onClick={() => setSelected(null)}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
-            <div className="flex items-start justify-between mb-4">
-              <div className={`p-2.5 rounded-xl ${selected.bg}`}>
-                {selected.type === 'expertise' ? <Stethoscope size={20} className={selected.couleur} /> :
-                 selected.type === 'echeance'  ? <Scale size={20} className={selected.couleur} /> :
-                 <Calendar size={20} className={selected.couleur} />}
-              </div>
-              <button onClick={() => setSelected(null)} className="text-gray-300 hover:text-gray-500 text-2xl leading-none">×</button>
-            </div>
-            <h3 className="font-bold text-lg mb-1">{selected.titre}</h3>
-            {selected.sous_titre && <p className="text-sm text-gray-500 mb-4 capitalize">{selected.sous_titre}</p>}
-            <div className="space-y-2 mb-5">
-              <div className="flex items-center gap-2 text-sm">
-                <Calendar size={14} className="text-gray-400 flex-shrink-0" />
-                <span className="capitalize">{new Date(selected.date + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}</span>
-              </div>
-              {selected.heure && (
-                <div className="flex items-center gap-2 text-sm">
-                  <Clock size={14} className="text-gray-400 flex-shrink-0" />
-                  <span>{selected.heure}</span>
-                </div>
-              )}
-              {(() => { const b = badgeJours(joursAvant(selected.date)); return (
-                <div className="flex items-center gap-2">
-                  <span className={`text-xs px-2 py-1 rounded-full ${b.cls}`}>{b.label}</span>
-                  {selected.dossier_ref && <span className="text-xs font-mono text-gray-400">{selected.dossier_ref}</span>}
-                </div>
-              )})()}
-            </div>
-            {selected.dossier_id && (
-              <Link href={`/dossiers/${selected.dossier_id}`}
-                className="btn-primary w-full flex items-center justify-center gap-2 text-sm"
-                onClick={() => setSelected(null)}>
-                Ouvrir le dossier →
-              </Link>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
-
-// ── Vue Mois ──────────────────────────────────────────────────────────────────
-function VueMois({ curseur, evtsParDate, onSelect }: { curseur: Date, evtsParDate: Record<string, Evenement[]>, onSelect: (e: Evenement) => void }) {
-  const annee = curseur.getFullYear(), mois = curseur.getMonth()
-  const decalage = (new Date(annee, mois, 1).getDay() + 6) % 7
-  const nbJours  = new Date(annee, mois + 1, 0).getDate()
-  const today    = toISO(new Date())
-  const cellules: (string | null)[] = [
-    ...Array(decalage).fill(null),
-    ...Array.from({ length: nbJours }, (_, i) => toISO(new Date(annee, mois, i + 1))),
-  ]
-  while (cellules.length % 7 !== 0) cellules.push(null)
-
-  return (
-    <div className="border border-gray-200 rounded-xl overflow-hidden">
-      <div className="grid grid-cols-7 bg-gray-50 border-b border-gray-200">
-        {JOURS.map(j => <div key={j} className="text-center py-2 text-xs font-semibold text-gray-500">{j}</div>)}
-      </div>
-      <div className="grid grid-cols-7 divide-x divide-y divide-gray-100">
-        {cellules.map((date, i) => {
-          const evts = date ? (evtsParDate[date] || []) : []
-          const isToday = date === today
-          const isPast  = date && date < today
-          return (
-            <div key={i} className={`min-h-[90px] p-1.5 ${isPast ? 'bg-gray-50/50' : 'bg-white'} ${!date ? 'bg-gray-50' : ''}`}>
-              {date && (
-                <>
-                  <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold mb-1 ${
-                    isToday ? 'bg-cabinet-blue text-white' : isPast ? 'text-gray-300' : 'text-gray-700'}`}>
-                    {new Date(date + 'T12:00:00').getDate()}
-                  </div>
-                  <div className="space-y-0.5">
-                    {evts.slice(0, 3).map(e => (
-                      <button key={e.id} onClick={() => onSelect(e)}
-                        className={`w-full text-left px-1.5 py-0.5 rounded text-xs truncate ${e.bg} ${e.couleur} hover:opacity-80 font-medium`}>
-                        {e.heure && <span className="opacity-60 mr-1">{e.heure}</span>}{e.titre}
-                      </button>
-                    ))}
-                    {evts.length > 3 && <div className="text-xs text-gray-400 pl-1">+{evts.length - 3}</div>}
-                  </div>
-                </>
-              )}
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-// ── Vue Semaine ───────────────────────────────────────────────────────────────
-function VueSemaine({ curseur, evtsParDate, onSelect }: { curseur: Date, evtsParDate: Record<string, Evenement[]>, onSelect: (e: Evenement) => void }) {
-  const lun = startOfWeek(curseur)
-  const jours = Array.from({ length: 7 }, (_, i) => addDays(lun, i))
-  const today = toISO(new Date())
-  return (
-    <div className="border border-gray-200 rounded-xl overflow-hidden">
-      <div className="grid grid-cols-7 divide-x divide-gray-100">
-        {jours.map((jour, idx) => {
-          const iso = toISO(jour), evts = evtsParDate[iso] || [], isToday = iso === today
-          return (
-            <div key={iso} className={`min-h-[320px] ${isToday ? 'bg-blue-50/30' : 'bg-white'}`}>
-              <div className={`text-center py-3 border-b border-gray-100 ${isToday ? 'bg-cabinet-blue text-white' : 'bg-gray-50 text-gray-600'}`}>
-                <div className="text-xs font-semibold">{JOURS[idx]}</div>
-                <div className="text-lg font-bold">{jour.getDate()}</div>
-              </div>
-              <div className="p-1.5 space-y-1">
-                {evts.map(e => (
-                  <button key={e.id} onClick={() => onSelect(e)}
-                    className={`w-full text-left p-1.5 rounded-lg text-xs ${e.bg} ${e.couleur} hover:opacity-80`}>
-                    {e.heure && <div className="font-bold opacity-70">{e.heure}</div>}
-                    <div className="font-semibold truncate">{e.titre}</div>
-                    {e.sous_titre && <div className="opacity-60 truncate capitalize text-xs">{e.sous_titre}</div>}
-                  </button>
-                ))}
-                {evts.length === 0 && <div className="text-center py-8 text-gray-200 text-xs">—</div>}
-              </div>
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-// ── Vue Liste ─────────────────────────────────────────────────────────────────
-function VueListe({ curseur, evtsFiltres, onSelect }: { curseur: Date, evtsFiltres: Evenement[], onSelect: (e: Evenement) => void }) {
-  const mois = curseur.getMonth(), annee = curseur.getFullYear()
-  const duMois = evtsFiltres
-    .filter(e => { const d = new Date(e.date); return d.getMonth() === mois && d.getFullYear() === annee })
-    .sort((a, b) => a.date.localeCompare(b.date))
-  const grouped: Record<string, Evenement[]> = {}
-  duMois.forEach(e => (grouped[e.date] = grouped[e.date] || []).push(e))
-
-  if (duMois.length === 0) return (
-    <div className="card text-center py-16 text-gray-300">
-      <Calendar size={40} className="mx-auto mb-3" /><p>Aucun événement ce mois</p>
-    </div>
-  )
-
-  return (
-    <div className="space-y-5">
-      {Object.entries(grouped).map(([date, evts]) => {
-        const j = joursAvant(date), badge = badgeJours(j)
-        const label = new Date(date + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })
-        return (
-          <div key={date}>
-            <div className="flex items-center gap-3 mb-2">
-              <span className="font-semibold text-sm text-gray-700 capitalize">{label}</span>
-              <span className={`text-xs px-2 py-0.5 rounded-full ${badge.cls}`}>{badge.label}</span>
-            </div>
-            <div className="space-y-1.5 pl-3 border-l-2 border-gray-100">
-              {evts.map(e => (
-                <button key={e.id} onClick={() => onSelect(e)}
-                  className={`w-full text-left flex items-center gap-3 p-3 rounded-xl ${e.bg} hover:opacity-90`}>
-                  <div className={`flex-shrink-0 ${e.couleur}`}>
-                    {e.type === 'expertise' ? <Stethoscope size={15} /> : e.type === 'echeance' ? <Scale size={15} /> : <Calendar size={15} />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className={`font-semibold text-sm ${e.couleur}`}>{e.titre}</div>
-                    {e.sous_titre && <div className="text-xs opacity-70 capitalize truncate">{e.sous_titre}</div>}
-                  </div>
-                  {e.heure && <div className={`text-xs font-mono flex-shrink-0 ${e.couleur} opacity-70`}>{e.heure}</div>}
-                  {e.dossier_ref && <div className="text-xs font-mono text-gray-400 flex-shrink-0">{e.dossier_ref}</div>}
-                </button>
+      ) : viewMode === 'mois' ? (
+        <>
+          <div className="card overflow-hidden">
+            <div className="grid grid-cols-7">
+              {['Lun', 'Mar', 'Mer', 'Jeu', 'Ven', 'Sam', 'Dim'].map(d => (
+                <div key={d} className="p-2 text-center text-xs font-semibold text-gray-500 bg-gray-50 border-b border-gray-100">{d}</div>
               ))}
+              {cells.map((day, i) => {
+                const isToday = day === today.getDate() && year === today.getFullYear() && month === today.getMonth()
+                const isSelected = day === selectedDay
+                const dayEvs = day ? (byDay[day] || []) : []
+                const isWeekend = (i % 7) >= 5
+                return (
+                  <div key={i}
+                    onClick={() => day && setSelectedDay(day === selectedDay ? null : day)}
+                    className={`min-h-[90px] p-1.5 border-b border-r border-gray-100 transition-colors
+                      ${day ? 'cursor-pointer hover:bg-blue-50/30' : ''}
+                      ${isSelected ? 'bg-blue-50' : ''}
+                      ${isWeekend && day ? 'bg-gray-50/50' : ''}
+                      ${!day ? 'bg-gray-50/30' : ''}
+                    `}>
+                    {day && (
+                      <>
+                        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-semibold mb-1
+                          ${isToday ? 'bg-cabinet-blue text-white' : 'text-gray-700'}`}>
+                          {day}
+                        </div>
+                        <div className="space-y-0.5">
+                          {dayEvs.slice(0, 3).map(ev => {
+                            const cfg = TYPE_CONFIG[ev.type]
+                            return (
+                              <div key={ev.id} className={`text-xs px-1.5 py-0.5 rounded truncate font-medium ${cfg.bg} ${cfg.color} border-l-2 ${cfg.border}`}>
+                                {ev.heure && <span className="opacity-70">{ev.heure} </span>}
+                                {ev.titre}
+                              </div>
+                            )
+                          })}
+                          {dayEvs.length > 3 && <div className="text-xs text-gray-400 px-1">+{dayEvs.length - 3}</div>}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                )
+              })}
             </div>
           </div>
-        )
-      })}
+
+          {selectedDay !== null && (
+            <div className="mt-4 card p-4">
+              <h3 className="font-semibold text-gray-900 mb-3">
+                {new Date(year, month, selectedDay).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}
+              </h3>
+              {selectedEvents.length === 0
+                ? <p className="text-sm text-gray-400">Aucun événement ce jour</p>
+                : <div className="space-y-2">{selectedEvents.map(ev => <EventCard key={ev.id} ev={ev} />)}</div>
+              }
+            </div>
+          )}
+        </>
+      ) : (
+        <div className="space-y-1">
+          {filtered.length === 0 ? (
+            <div className="card p-8 text-center text-gray-400">
+              <Calendar size={32} className="mx-auto mb-2 opacity-30" />
+              Aucun événement ce mois
+            </div>
+          ) : (
+            Object.entries(
+              filtered.reduce((acc: Record<string, CalEvent[]>, ev) => {
+                if (!acc[ev.date]) acc[ev.date] = []
+                acc[ev.date].push(ev)
+                return acc
+              }, {})
+            ).sort(([a], [b]) => a.localeCompare(b)).map(([date, evs]) => (
+              <div key={date}>
+                <div className="text-xs font-semibold text-gray-500 uppercase px-1 mb-1 mt-4 first:mt-0 capitalize">
+                  {new Date(date + 'T12:00:00').toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' })}
+                </div>
+                <div className="space-y-2">{evs.map(ev => <EventCard key={ev.id} ev={ev} />)}</div>
+              </div>
+            ))
+          )}
+        </div>
+      )}
     </div>
   )
 }
 
-export const dynamic = 'force-dynamic'
+function EventCard({ ev }: { ev: CalEvent }) {
+  const cfg = TYPE_CONFIG[ev.type]
+  const Icon = cfg.icon
+  const inner = (
+    <div className={`p-3 rounded-lg border ${cfg.bg} ${cfg.border} hover:shadow-sm transition-shadow`}>
+      <div className="flex items-start gap-3">
+        <div className={`mt-0.5 ${cfg.color}`}><Icon size={15} /></div>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className={`text-xs font-semibold px-1.5 py-0.5 rounded ${cfg.bg} ${cfg.color}`}>{cfg.label}</span>
+            {ev.heure && <span className="text-xs text-gray-500 flex items-center gap-0.5"><Clock size={11} />{ev.heure}</span>}
+            {ev.dossier_ref && <span className="text-xs text-gray-400 font-mono">{ev.dossier_ref}</span>}
+          </div>
+          <div className="font-medium text-gray-900 text-sm mt-0.5 truncate">{ev.titre}</div>
+          {ev.client_nom && (
+            <div className="text-xs text-gray-500 flex items-center gap-1 mt-0.5">
+              <User size={11} />{ev.client_nom}
+            </div>
+          )}
+          {ev.sousTitre && <div className="text-xs text-gray-500 mt-0.5">{ev.sousTitre}</div>}
+          {ev.lieu && (
+            <div className="text-xs text-gray-400 flex items-center gap-1 mt-0.5">
+              <MapPin size={11} />{ev.lieu}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+  return ev.dossier_id ? <Link href={`/dossiers/${ev.dossier_id}`}>{inner}</Link> : inner
+}

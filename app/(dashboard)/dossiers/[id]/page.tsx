@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { ETAPES_LABELS, ETAPES_COULEURS, TYPE_ACCIDENT_LABELS, type Dossier, type Client, type Etape, type Expertise, type Audience } from '@/lib/types'
-import { ArrowLeft, Download, Phone, Mail, Calendar, Scale, Stethoscope, Euro, ChevronRight, Plus, Save, AlertTriangle, FileText, Clock, Gavel, User, Upload, Trash2, Edit2, X } from 'lucide-react'
+import { ArrowLeft, Download, Phone, Mail, Calendar, Scale, Stethoscope, Euro, ChevronRight, Plus, Save, AlertTriangle, FileText, Clock, Gavel, User, Upload, Trash2, Edit2, X, CheckSquare, Check } from 'lucide-react'
 import Link from 'next/link'
 import { exportDossierPDF } from '@/lib/export-pdf'
 import { useParams } from 'next/navigation'
@@ -37,11 +37,12 @@ export default function DossierDetail() {
   const [cabinet, setCabinet] = useState<any>(null)
   const [documents, setDocuments] = useState<any[]>([])
   const [uploading, setUploading] = useState(false)
-  const [tab, setTab] = useState<'detail' | 'procedure' | 'expertises' | 'audiences' | 'financier' | 'notes' | 'historique' | 'documents'>('detail')
+  const [tab, setTab] = useState<'detail' | 'procedure' | 'expertises' | 'audiences' | 'financier' | 'notes' | 'taches' | 'historique' | 'documents'>('detail')
   const [loading, setLoading] = useState(true)
   const [noteTexte, setNoteTexte] = useState('')
   const [savingNote, setSavingNote] = useState(false)
   const [relances, setRelances] = useState<any[]>([])
+  const [taches, setTaches] = useState<any[]>([])
   const [relanceForm, setRelanceForm] = useState({ type: 'telephone', motif: '', statut: 'envoye' })
   const [savingRelance, setSavingRelance] = useState(false)
   const [noteMode, setNoteMode] = useState<'note' | 'relance'>('note')
@@ -86,6 +87,8 @@ export default function DossierDetail() {
         if (h) setHistorique(h)
         const { data: relancesData } = await supabase.from('relances').select('*').eq('dossier_id', id).order('created_at', { ascending: false })
         if (relancesData) setRelances(relancesData)
+        const { data: tachesData } = await supabase.from('taches').select('*, assignee:utilisateurs(nom, prenom)').eq('dossier_id', id).order('date_echeance', { ascending: true, nullsFirst: false })
+        if (tachesData) setTaches(tachesData)
         if (u) setUtilisateurs(u)
       }
       // docs chargés via query 7
@@ -288,6 +291,7 @@ export default function DossierDetail() {
           ['audiences', `Audiences (${audiences.length})`],
           ['financier', 'Financier'],
           ['notes', `Notes (${notes.length})`],
+          ['taches', 'Tâches'],
           ['historique', 'Timeline'],
           ['documents', `Documents (${documents.length})`],
         ].map(([t, label]) => (
@@ -934,6 +938,17 @@ export default function DossierDetail() {
       )}
 
       {/* Onglet Historique */}
+      {tab === 'taches' && (
+        <TachesDossier
+          dossier_id={id}
+          taches={taches}
+          utilisateurs={utilisateurs}
+          onReload={async () => {
+            const { data } = await supabase.from('taches').select('*, assignee:utilisateurs(nom, prenom)').eq('dossier_id', id).order('date_echeance', { ascending: true, nullsFirst: false })
+            if (data) setTaches(data)
+          }}
+        />
+      )}
       {tab === 'historique' && (
         <TimelineDossier
           historique={historique}
@@ -1047,6 +1062,121 @@ function Flag({ label, active, danger }: { label: string; active: boolean; dange
   )
 }
 
+
+
+// ─── Tâches par dossier ───────────────────────────────────────────────────────
+
+const STATUT_COLORS_T: Record<string, string> = { a_faire: 'bg-gray-100 text-gray-600', en_cours: 'bg-blue-100 text-blue-700', terminee: 'bg-green-100 text-green-700', annulee: 'bg-gray-100 text-gray-400' }
+const PRIO_DOTS_T: Record<string, string> = { urgente: 'bg-red-500', haute: 'bg-orange-400', normale: 'bg-gray-300', basse: 'bg-blue-300' }
+
+function TachesDossier({ dossier_id, taches, utilisateurs, onReload }: {
+  dossier_id: string, taches: any[], utilisateurs: any[], onReload: () => Promise<void>
+}) {
+  const [showForm, setShowForm] = useState(false)
+  const [saving, setSaving] = useState(false)
+  const [form, setForm] = useState({ titre: '', priorite: 'normale', date_echeance: '', assignee_id: '', description: '' })
+
+  const actives   = taches.filter(t => t.statut !== 'terminee' && t.statut !== 'annulee')
+  const terminees = taches.filter(t => t.statut === 'terminee')
+
+  const changerStatut = async (id: string, statut: string) => {
+    await supabase.from('taches').update({ statut, date_completee: statut === 'terminee' ? new Date().toISOString() : null }).eq('id', id)
+    await onReload()
+  }
+
+  const creer = async () => {
+    if (!form.titre.trim()) return
+    setSaving(true)
+    await supabase.from('taches').insert({ ...form, dossier_id, assignee_id: form.assignee_id || null, date_echeance: form.date_echeance || null })
+    setForm({ titre: '', priorite: 'normale', date_echeance: '', assignee_id: '', description: '' })
+    setShowForm(false)
+    setSaving(false)
+    await onReload()
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <span className="text-sm text-gray-500 font-medium">{actives.length} tâche{actives.length > 1 ? 's' : ''} active{actives.length > 1 ? 's' : ''}</span>
+        <button onClick={() => setShowForm(s => !s)} className="btn-primary text-sm flex items-center gap-1.5 py-1.5">
+          <Plus size={14} /> Ajouter
+        </button>
+      </div>
+
+      {/* Formulaire rapide */}
+      {showForm && (
+        <div className="card border-2 border-cabinet-blue/20 space-y-3">
+          <input autoFocus value={form.titre} onChange={e => setForm(p => ({ ...p, titre: e.target.value }))}
+            className="input-field" placeholder="Titre de la tâche *" />
+          <div className="grid grid-cols-3 gap-2">
+            <select value={form.priorite} onChange={e => setForm(p => ({ ...p, priorite: e.target.value }))} className="input-field text-xs">
+              <option value="basse">Basse</option>
+              <option value="normale">Normale</option>
+              <option value="haute">Haute</option>
+              <option value="urgente">Urgente</option>
+            </select>
+            <input type="date" value={form.date_echeance} onChange={e => setForm(p => ({ ...p, date_echeance: e.target.value }))} className="input-field text-xs" />
+            <select value={form.assignee_id} onChange={e => setForm(p => ({ ...p, assignee_id: e.target.value }))} className="input-field text-xs">
+              <option value="">Non assigné</option>
+              {utilisateurs.map((u: any) => <option key={u.id} value={u.id}>{u.prenom} {u.nom}</option>)}
+            </select>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={creer} disabled={saving || !form.titre.trim()} className="btn-primary text-sm py-1.5">{saving ? 'Ajout...' : 'Ajouter'}</button>
+            <button onClick={() => setShowForm(false)} className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-500">Annuler</button>
+          </div>
+        </div>
+      )}
+
+      {/* Tâches actives */}
+      {actives.length === 0 && !showForm && (
+        <div className="card text-center py-10 text-gray-300">
+          <CheckSquare size={32} className="mx-auto mb-2" />
+          <p className="text-sm">Aucune tâche active</p>
+        </div>
+      )}
+      <div className="space-y-1.5">
+        {actives.map((t: any) => {
+          const retard = t.date_echeance && new Date(t.date_echeance) < new Date()
+          return (
+            <div key={t.id} className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 hover:border-gray-200 transition-colors">
+              <button onClick={() => changerStatut(t.id, t.statut === 'en_cours' ? 'a_faire' : 'en_cours')}
+                className={`w-4 h-4 rounded border-2 flex-shrink-0 transition-colors ${t.statut === 'en_cours' ? 'border-blue-500 bg-blue-100' : 'border-gray-300 hover:border-blue-400'}`} />
+              <div className={`w-2 h-2 rounded-full flex-shrink-0 ${PRIO_DOTS_T[t.priorite]}`} />
+              <div className="flex-1 min-w-0">
+                <span className="text-sm font-medium">{t.titre}</span>
+                <div className="flex gap-2 mt-0.5 text-xs text-gray-400">
+                  {t.assignee && <span>{t.assignee.prenom} {t.assignee.nom}</span>}
+                  {t.date_echeance && <span className={retard ? 'text-red-500 font-medium' : ''}>{retard ? '⚠ ' : ''}Éch. {new Date(t.date_echeance + 'T12:00:00').toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })}</span>}
+                </div>
+              </div>
+              <span className={`text-xs px-2 py-0.5 rounded-full flex-shrink-0 ${STATUT_COLORS_T[t.statut]}`}>{t.statut === 'a_faire' ? 'À faire' : 'En cours'}</span>
+              <button onClick={() => changerStatut(t.id, 'terminee')} className="text-xs text-green-600 hover:text-green-700 flex-shrink-0 px-2 py-1 hover:bg-green-50 rounded-lg">✓ Terminer</button>
+            </div>
+          )
+        })}
+      </div>
+
+      {/* Tâches terminées (repliables) */}
+      {terminees.length > 0 && (
+        <details className="group">
+          <summary className="cursor-pointer text-xs text-gray-400 hover:text-gray-600 select-none">{terminees.length} tâche{terminees.length > 1 ? 's' : ''} terminée{terminees.length > 1 ? 's' : ''}</summary>
+          <div className="space-y-1 mt-2">
+            {terminees.map((t: any) => (
+              <div key={t.id} className="flex items-center gap-3 p-2.5 rounded-lg bg-gray-50 opacity-60">
+                <div className="w-4 h-4 rounded border-2 border-green-400 bg-green-400 flex items-center justify-center flex-shrink-0">
+                  <Check size={10} className="text-white" />
+                </div>
+                <span className="text-sm text-gray-400 line-through">{t.titre}</span>
+                <button onClick={() => changerStatut(t.id, 'a_faire')} className="ml-auto text-xs text-gray-400 hover:text-gray-600">Rouvrir</button>
+              </div>
+            ))}
+          </div>
+        </details>
+      )}
+    </div>
+  )
+}
 
 // ─── Timeline Dossier ─────────────────────────────────────────────────────────
 
