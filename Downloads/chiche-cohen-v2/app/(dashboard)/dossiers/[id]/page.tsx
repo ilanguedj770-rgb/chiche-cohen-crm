@@ -46,6 +46,10 @@ export default function DossierDetail() {
   const [showEtapeMenu, setShowEtapeMenu] = useState(false)
   const [editingEtape, setEditingEtape] = useState(false)
   const [editFinancier, setEditFinancier] = useState(false)
+  const [editProcedure, setEditProcedure] = useState(false)
+  const [procForm, setProcForm] = useState<any>({})
+  const [savingProc, setSavingProc] = useState(false)
+  const [showNouvelleProc, setShowNouvelleProc] = useState(false)
   const [finForm, setFinForm] = useState({ offre_assureur: '', montant_reclame: '', montant_obtenu: '', honoraires_fixes: '', honoraires_resultat: '', taux_honoraires_resultat: '' })
   const [savingFin, setSavingFin] = useState(false)
 
@@ -81,6 +85,20 @@ export default function DossierDetail() {
     }
     load()
   }, [id])
+
+  const saveProcedure = async () => {
+    setSavingProc(true)
+    if (procedure) {
+      const { data } = await supabase.from('procedures_judiciaires').update(procForm).eq('id', procedure.id).select().single()
+      if (data) setProcedure(data)
+    } else {
+      const { data } = await supabase.from('procedures_judiciaires').insert({ dossier_id: id, decision: 'en_attente', ...procForm }).select().single()
+      if (data) setProcedure(data)
+    }
+    setSavingProc(false)
+    setEditProcedure(false)
+    setShowNouvelleProc(false)
+  }
 
   const saveFinancier = async () => {
     setSavingFin(true)
@@ -284,17 +302,104 @@ export default function DossierDetail() {
       {/* Onglet Procédure */}
       {tab === 'procedure' && (
         <div className="space-y-4">
-          {!procedure ? (
+          {/* Bouton édition */}
+          <div className="flex justify-end">
+            {editProcedure ? (
+              <div className="flex gap-2">
+                <button onClick={() => setEditProcedure(false)} className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 flex items-center gap-1"><X size={13} /> Annuler</button>
+                <button onClick={saveProcedure} disabled={savingProc} className="btn-primary flex items-center gap-2 text-sm py-1.5">
+                  <Save size={13} /> {savingProc ? 'Enregistrement...' : 'Enregistrer'}
+                </button>
+              </div>
+            ) : procedure && (
+              <button onClick={() => { setProcForm({ ...procedure }); setEditProcedure(true) }} className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 flex items-center gap-1">
+                <Edit2 size={13} /> Modifier
+              </button>
+            )}
+          </div>
+
+          {!procedure && !editProcedure ? (
             <div className="card text-center py-12">
               <Gavel size={40} className="mx-auto mb-3 text-gray-200" />
               <p className="text-gray-400 mb-4">Aucune procédure judiciaire enregistrée</p>
-              <button onClick={async () => {
-                await supabase.from('procedures_judiciaires').insert({ dossier_id: id, tribunal: 'TJ Marseille', decision: 'en_attente' })
-                const { data: p } = await supabase.from('procedures_judiciaires').select('*').eq('dossier_id', id).order('created_at', { ascending: false }).limit(1).maybeSingle()
-                if (p) setProcedure(p)
-              }} className="btn-primary">
+              <button onClick={() => { setProcForm({}); setEditProcedure(true) }} className="btn-primary">
                 <Plus size={14} className="inline mr-1" /> Créer la procédure
               </button>
+            </div>
+          ) : editProcedure ? (
+            <div className="card space-y-4">
+              <h3 className="font-semibold flex items-center gap-2"><Gavel size={16} className="text-purple-500" />Procédure judiciaire</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs text-gray-500 font-medium block mb-1">Tribunal</label>
+                  <input value={procForm.tribunal || ''} onChange={e => setProcForm((f: any) => ({ ...f, tribunal: e.target.value }))} className="input-field" placeholder="TJ Aix-en-Provence..." />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 font-medium block mb-1">N° affaire</label>
+                  <input value={procForm.numero_affaire || ''} onChange={e => setProcForm((f: any) => ({ ...f, numero_affaire: e.target.value }))} className="input-field" placeholder="24/12345" />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 font-medium block mb-1">Juge</label>
+                  <input value={procForm.juge_nom || ''} onChange={e => setProcForm((f: any) => ({ ...f, juge_nom: e.target.value }))} className="input-field" />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 font-medium block mb-1">Date d'assignation</label>
+                  <input type="date" value={procForm.date_assignation?.slice(0,10) || ''} onChange={e => setProcForm((f: any) => ({ ...f, date_assignation: e.target.value }))} className="input-field" />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 font-medium block mb-1">Date signification</label>
+                  <input type="date" value={procForm.date_signification?.slice(0,10) || ''} onChange={e => setProcForm((f: any) => ({ ...f, date_signification: e.target.value }))} className="input-field" />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 font-medium block mb-1">Prochaine audience</label>
+                  <input type="date" value={procForm.prochaine_audience?.slice(0,10) || ''} onChange={e => setProcForm((f: any) => ({ ...f, prochaine_audience: e.target.value }))} className="input-field" />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 font-medium block mb-1">Nature audience</label>
+                  <select value={procForm.nature_prochaine_audience || ''} onChange={e => setProcForm((f: any) => ({ ...f, nature_prochaine_audience: e.target.value }))} className="input-field">
+                    <option value="">—</option>
+                    {['audience_orientation','audience_fond','delibere','refere','conciliation'].map(v => <option key={v} value={v}>{v.replace(/_/g,' ')}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 font-medium block mb-1">Date délibéré</label>
+                  <input type="date" value={procForm.date_delibere?.slice(0,10) || ''} onChange={e => setProcForm((f: any) => ({ ...f, date_delibere: e.target.value }))} className="input-field" />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 font-medium block mb-1">Décision</label>
+                  <select value={procForm.decision || 'en_attente'} onChange={e => setProcForm((f: any) => ({ ...f, decision: e.target.value }))} className="input-field">
+                    <option value="en_attente">En attente</option>
+                    <option value="favorable">Favorable</option>
+                    <option value="partiel">Partiel</option>
+                    <option value="defavorable">Défavorable</option>
+                  </select>
+                </div>
+                {(procForm.decision === 'favorable' || procForm.decision === 'partiel') && (
+                  <>
+                    <div>
+                      <label className="text-xs text-gray-500 font-medium block mb-1">Montant alloué</label>
+                      <input type="number" value={procForm.montant_alloue || ''} onChange={e => setProcForm((f: any) => ({ ...f, montant_alloue: e.target.value }))} className="input-field" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-gray-500 font-medium block mb-1">Article 700</label>
+                      <input type="number" value={procForm.article_700 || ''} onChange={e => setProcForm((f: any) => ({ ...f, article_700: e.target.value }))} className="input-field" />
+                    </div>
+                  </>
+                )}
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 font-medium block mb-1">Notes procédure</label>
+                <textarea value={procForm.notes || ''} onChange={e => setProcForm((f: any) => ({ ...f, notes: e.target.value }))} rows={3} className="input-field" />
+              </div>
+              <div className="flex items-center gap-3 pt-2 border-t border-gray-100">
+                <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                  <input type="checkbox" checked={procForm.appel_interjete || false} onChange={e => setProcForm((f: any) => ({ ...f, appel_interjete: e.target.checked }))} />
+                  Appel interjeté
+                </label>
+                {procForm.appel_interjete && (
+                  <input type="date" value={procForm.date_appel?.slice(0,10) || ''} onChange={e => setProcForm((f: any) => ({ ...f, date_appel: e.target.value }))} className="input-field w-40" />
+                )}
+              </div>
             </div>
           ) : (
             <div className="grid grid-cols-2 gap-6">
