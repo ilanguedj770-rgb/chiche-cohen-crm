@@ -41,12 +41,13 @@ export default function JudiciaireePage() {
       ])
 
       // Charger les données liées
-      const dossierIds = [...new Set([
+      const allIds = [
         ...(aud.data?.map(a => a.dossier_id) || []),
         ...(del.data?.map(d => d.dossier_id) || []),
         ...(exp.data?.map(e => e.dossier_id) || []),
         ...(dos.data?.map(d => d.id) || []),
-      ])].filter(Boolean)
+      ]
+      const dossierIds = allIds.filter((id, index) => id && allIds.indexOf(id) === index)
 
       const clientIds = dos.data?.map(d => d.client_id).filter(Boolean) || []
 
