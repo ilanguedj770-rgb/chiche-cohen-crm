@@ -50,7 +50,7 @@ export default function LeadsPage() {
                     {l.priorite === 'haute' && <span className="badge bg-orange-100 text-orange-600 text-xs">🟠 Haute</span>}
                   </div>
                   <div className="flex gap-3 mt-0.5 text-xs text-gray-400">
-                    <span>{TYPE_ACCIDENT_LABELS[l.type_accident] || l.type_accident}</span>
+                    <span>{(TYPE_ACCIDENT_LABELS as any)[l.type_accident] || l.type_accident}</span>
                     {l.client?.telephone && <span>• {l.client.telephone}</span>}
                     <span>• {l.source}</span>
                   </div>
