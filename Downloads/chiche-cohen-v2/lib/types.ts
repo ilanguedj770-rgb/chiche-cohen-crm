@@ -17,22 +17,14 @@ export type TypeAccident =
   | 'accident_vie'
   | 'autre'
 
-export type RoleUtilisateur = 'associe' | 'collaborateur' | 'juriste' | 'secretariat'
-
 export interface Client {
   id: string
   nom: string
   prenom: string
   date_naissance?: string
   telephone?: string
-  telephone_whatsapp?: string
   email?: string
-  adresse?: string
-  ville?: string
   profession?: string
-  statut_professionnel?: string
-  revenus_annuels_nets?: number
-  created_at: string
 }
 
 export interface Utilisateur {
@@ -40,7 +32,7 @@ export interface Utilisateur {
   nom: string
   prenom: string
   email: string
-  role: RoleUtilisateur
+  role: string
   actif: boolean
 }
 
@@ -50,7 +42,6 @@ export interface Dossier {
   client_id: string
   juriste_id?: string
   avocat_id?: string
-  apporteur_id?: string
   type_accident: TypeAccident
   date_accident?: string
   lieu_accident?: string
@@ -58,67 +49,62 @@ export interface Dossier {
   assureur_nom?: string
   assureur_reference_sinistre?: string
   etape: Etape
-  voie?: 'amiable' | 'judiciaire'
+  voie?: string
   consolidation_atteinte: boolean
   date_consolidation?: string
   refus_garantie: boolean
   procedure_fgao: boolean
   procedure_civi: boolean
   offre_assureur?: number
-  date_offre_assureur?: string
   montant_reclame?: number
   montant_obtenu?: number
-  honoraires_resultat?: number
   taux_honoraires_resultat: number
   score_potentiel?: number
-  priorite: 'basse' | 'normale' | 'haute' | 'urgente'
+  priorite: string
   source: string
   notes?: string
   created_at: string
   updated_at: string
 }
 
-export interface DossierPipeline extends Dossier {
+export interface DossierPipeline {
+  id: string
+  reference: string
   client_nom: string
   client_prenom: string
   client_telephone?: string
-  client_email?: string
+  type_accident: TypeAccident
+  etape: Etape
   juriste_nom?: string
   avocat_nom?: string
+  score_potentiel?: number
+  jours_inactif: number
   prochaine_audience?: string
   prochaine_expertise?: string
-  jours_inactif: number
+  voie?: string
 }
 
 export interface Expertise {
   id: string
   dossier_id: string
-  type: 'amiable' | 'judiciaire' | 'sapiteur'
+  type: string
   expert_nom?: string
   medecin_conseil_nom?: string
-  medecin_conseil_telephone?: string
   date_expertise?: string
-  heure_expertise?: string
   lieu_expertise?: string
   taux_dfp?: number
   duree_itt_jours?: number
   quantum_doloris?: number
   prejudice_esthetique?: number
-  consolidation_date?: string
   observations?: string
-  rappel_j7_envoye: boolean
-  rappel_j2_envoye: boolean
 }
 
 export interface Audience {
   id: string
   dossier_id: string
-  procedure_id?: string
   date_audience: string
   nature: string
   tribunal?: string
-  salle?: string
-  avocat_id?: string
   resultat?: string
   rappel_j15_envoye: boolean
   rappel_j2_envoye: boolean
@@ -164,9 +150,9 @@ export const ETAPES_COULEURS: Record<Etape, string> = {
 }
 
 export const TYPE_ACCIDENT_LABELS: Record<TypeAccident, string> = {
-  accident_route: '🚗 Accident de la route',
+  accident_route: '🚗 Accident route',
   erreur_medicale: '🏥 Erreur médicale',
   agression: '⚖️ Agression',
-  accident_vie: '⚠️ Accident de la vie',
+  accident_vie: '⚠️ Accident vie',
   autre: 'Autre',
 }

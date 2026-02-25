@@ -5,24 +5,23 @@
 @layer base {
   body {
     @apply bg-gray-50 text-gray-900;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   }
 }
 
 @layer components {
   .btn-primary {
-    @apply bg-cabinet-blue text-white px-4 py-2 rounded-lg hover:bg-cabinet-blue-mid transition-colors font-medium text-sm;
+    @apply bg-cabinet-blue text-white px-4 py-2 rounded-lg hover:bg-cabinet-blue-mid transition-colors font-medium text-sm disabled:opacity-50;
   }
   .btn-secondary {
     @apply bg-white text-cabinet-blue border border-cabinet-blue px-4 py-2 rounded-lg hover:bg-cabinet-blue-light transition-colors font-medium text-sm;
   }
   .card {
-    @apply bg-white rounded-xl shadow-sm border border-gray-100 p-6;
+    @apply bg-white rounded-xl shadow-sm border border-gray-100 p-5;
   }
   .badge {
     @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
   }
   .input {
-    @apply w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-cabinet-blue/20 focus:border-cabinet-blue transition-colors bg-white;
+    @apply w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-100 focus:border-cabinet-blue bg-white;
   }
 }
