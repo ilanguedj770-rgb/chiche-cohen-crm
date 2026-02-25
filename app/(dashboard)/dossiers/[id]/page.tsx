@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { ETAPES_LABELS, ETAPES_COULEURS, TYPE_ACCIDENT_LABELS, type Dossier, type Client, type Etape, type Expertise, type Audience } from '@/lib/types'
-import { ArrowLeft, Phone, Mail, Calendar, Scale, Stethoscope, Euro, ChevronRight, Plus, Save, AlertTriangle, FileText, Clock, Gavel, User, Upload, Download, Trash2 } from 'lucide-react'
+import { ArrowLeft, Phone, Mail, Calendar, Scale, Stethoscope, Euro, ChevronRight, Plus, Save, AlertTriangle, FileText, Clock, Gavel, User, Upload, Download, Trash2, Edit2, X } from 'lucide-react'
 import Link from 'next/link'
 import { useParams } from 'next/navigation'
 
@@ -39,8 +39,15 @@ export default function DossierDetail() {
   const [loading, setLoading] = useState(true)
   const [noteTexte, setNoteTexte] = useState('')
   const [savingNote, setSavingNote] = useState(false)
+  const [relances, setRelances] = useState<any[]>([])
+  const [relanceForm, setRelanceForm] = useState({ type: 'telephone', motif: '', statut: 'envoye' })
+  const [savingRelance, setSavingRelance] = useState(false)
+  const [noteMode, setNoteMode] = useState<'note' | 'relance'>('note')
   const [showEtapeMenu, setShowEtapeMenu] = useState(false)
   const [editingEtape, setEditingEtape] = useState(false)
+  const [editFinancier, setEditFinancier] = useState(false)
+  const [finForm, setFinForm] = useState({ offre_assureur: '', montant_reclame: '', montant_obtenu: '', honoraires_fixes: '', honoraires_resultat: '', taux_honoraires_resultat: '' })
+  const [savingFin, setSavingFin] = useState(false)
 
   useEffect(() => {
     async function load() {
@@ -63,6 +70,8 @@ export default function DossierDetail() {
         if (p) setProcedure(p)
         if (n) setNotes(n)
         if (h) setHistorique(h)
+        const { data: relancesData } = await supabase.from('relances').select('*').eq('dossier_id', id).order('created_at', { ascending: false })
+        if (relancesData) setRelances(relancesData)
         if (u) setUtilisateurs(u)
       }
       // docs chargés via query 7
@@ -72,6 +81,31 @@ export default function DossierDetail() {
     }
     load()
   }, [id])
+
+  const saveFinancier = async () => {
+    setSavingFin(true)
+    const update: any = {}
+    if (finForm.offre_assureur) update.offre_assureur = Number(finForm.offre_assureur)
+    if (finForm.montant_reclame) update.montant_reclame = Number(finForm.montant_reclame)
+    if (finForm.montant_obtenu) update.montant_obtenu = Number(finForm.montant_obtenu)
+    if (finForm.honoraires_fixes) update.honoraires_fixes = Number(finForm.honoraires_fixes)
+    if (finForm.honoraires_resultat) update.honoraires_resultat = Number(finForm.honoraires_resultat)
+    if (finForm.taux_honoraires_resultat) update.taux_honoraires_resultat = Number(finForm.taux_honoraires_resultat)
+    const { data } = await supabase.from('dossiers').update(update).eq('id', id).select().single()
+    if (data) setDossier(data)
+    setSavingFin(false)
+    setEditFinancier(false)
+  }
+
+  const ajouterRelance = async () => {
+    if (!relanceForm.motif.trim()) return
+    setSavingRelance(true)
+    await supabase.from('relances').insert({ dossier_id: id, client_id: dossier?.client_id, ...relanceForm })
+    const { data: r } = await supabase.from('relances').select('*').eq('dossier_id', id).order('created_at', { ascending: false })
+    if (r) setRelances(r)
+    setRelanceForm({ type: 'telephone', motif: '', statut: 'envoye' })
+    setSavingRelance(false)
+  }
 
   const changerEtape = async (nouvelleEtape: Etape) => {
     if (!dossier || nouvelleEtape === dossier.etape) return
@@ -373,89 +407,226 @@ export default function DossierDetail() {
       {/* Onglet Financier */}
       {tab === 'financier' && (
         <div className="space-y-6">
-          <div className="grid grid-cols-3 gap-4">
-            {[
-              { label: 'Offre assureur', value: dossier.offre_assureur, color: 'text-yellow-600', bg: 'bg-yellow-50' },
-              { label: 'Montant réclamé', value: dossier.montant_reclame, color: 'text-blue-600', bg: 'bg-blue-50' },
-              { label: 'Montant obtenu', value: dossier.montant_obtenu, color: 'text-green-600', bg: 'bg-green-50' },
-            ].map(({ label, value, color, bg }) => (
-              <div key={label} className={`card text-center ${bg}`}>
-                <Euro size={24} className={`mx-auto mb-2 ${color}`} />
-                <div className={`text-3xl font-bold ${color}`}>{formatEuro(value)}</div>
-                <div className="text-sm text-gray-500 mt-1">{label}</div>
+          {/* Header avec bouton édition */}
+          <div className="flex justify-end">
+            {editFinancier ? (
+              <div className="flex gap-2">
+                <button onClick={() => setEditFinancier(false)} className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 flex items-center gap-1">
+                  <X size={13} /> Annuler
+                </button>
+                <button onClick={saveFinancier} disabled={savingFin} className="btn-primary flex items-center gap-2 text-sm py-1.5">
+                  <Save size={13} /> {savingFin ? 'Enregistrement...' : 'Enregistrer'}
+                </button>
               </div>
-            ))}
+            ) : (
+              <button onClick={() => {
+                setFinForm({
+                  offre_assureur: dossier.offre_assureur?.toString() || '',
+                  montant_reclame: dossier.montant_reclame?.toString() || '',
+                  montant_obtenu: dossier.montant_obtenu?.toString() || '',
+                  honoraires_fixes: dossier.honoraires_fixes?.toString() || '',
+                  honoraires_resultat: dossier.honoraires_resultat?.toString() || '',
+                  taux_honoraires_resultat: dossier.taux_honoraires_resultat?.toString() || '',
+                })
+                setEditFinancier(true)
+              }} className="px-3 py-1.5 border border-gray-200 rounded-lg text-sm text-gray-600 hover:bg-gray-50 flex items-center gap-1">
+                <Edit2 size={13} /> Modifier les montants
+              </button>
+            )}
           </div>
 
-          {dossier.offre_assureur && dossier.montant_reclame && (
-            <div className="card bg-blue-50 border border-blue-100">
-              <div className="grid grid-cols-3 gap-4 text-center">
-                <div>
-                  <div className="text-xs text-gray-500 mb-1">Différence réclamé / offre</div>
-                  <div className="text-xl font-bold text-blue-700">+{formatEuro((dossier.montant_reclame || 0) - (dossier.offre_assureur || 0))}</div>
+          {/* Montants éditables */}
+          {editFinancier ? (
+            <div className="card">
+              <h3 className="font-semibold mb-4 text-sm">Montants (€)</h3>
+              <div className="grid grid-cols-3 gap-4">
+                {[
+                  ['offre_assureur', 'Offre assureur'],
+                  ['montant_reclame', 'Montant réclamé'],
+                  ['montant_obtenu', 'Montant obtenu'],
+                  ['honoraires_fixes', 'Honoraires fixes'],
+                  ['honoraires_resultat', 'Honoraires résultat'],
+                  ['taux_honoraires_resultat', 'Taux hono résultat (%)'],
+                ].map(([field, label]) => (
+                  <div key={field}>
+                    <label className="text-xs text-gray-500 font-medium block mb-1">{label}</label>
+                    <input type="number" value={(finForm as any)[field]} onChange={e => setFinForm(f => ({ ...f, [field]: e.target.value }))}
+                      className="input-field" placeholder="0" />
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="grid grid-cols-3 gap-4">
+                {[
+                  { label: 'Offre assureur', value: dossier.offre_assureur, color: 'text-yellow-600', bg: 'bg-yellow-50' },
+                  { label: 'Montant réclamé', value: dossier.montant_reclame, color: 'text-blue-600', bg: 'bg-blue-50' },
+                  { label: 'Montant obtenu', value: dossier.montant_obtenu, color: 'text-green-600', bg: 'bg-green-50' },
+                ].map(({ label, value, color, bg }) => (
+                  <div key={label} className={`card text-center ${bg}`}>
+                    <Euro size={24} className={`mx-auto mb-2 ${color}`} />
+                    <div className={`text-3xl font-bold ${color}`}>{formatEuro(value)}</div>
+                    <div className="text-sm text-gray-500 mt-1">{label}</div>
+                  </div>
+                ))}
+              </div>
+
+              {dossier.offre_assureur && dossier.montant_reclame && (
+                <div className="card bg-blue-50 border border-blue-100">
+                  <div className="grid grid-cols-3 gap-4 text-center">
+                    <div>
+                      <div className="text-xs text-gray-500 mb-1">Différence réclamé / offre</div>
+                      <div className="text-xl font-bold text-blue-700">+{formatEuro((dossier.montant_reclame || 0) - (dossier.offre_assureur || 0))}</div>
+                    </div>
+                    {dossier.montant_obtenu && dossier.offre_assureur && (
+                      <div>
+                        <div className="text-xs text-gray-500 mb-1">Gain vs offre initiale</div>
+                        <div className="text-xl font-bold text-green-700">+{formatEuro(dossier.montant_obtenu - dossier.offre_assureur)}</div>
+                      </div>
+                    )}
+                    {dossier.montant_obtenu && dossier.montant_reclame && (
+                      <div>
+                        <div className="text-xs text-gray-500 mb-1">Taux d'obtention</div>
+                        <div className="text-xl font-bold text-purple-700">{Math.round(dossier.montant_obtenu / dossier.montant_reclame * 100)}%</div>
+                      </div>
+                    )}
+                  </div>
                 </div>
-                {dossier.montant_obtenu && dossier.offre_assureur && (
-                  <div>
-                    <div className="text-xs text-gray-500 mb-1">Gain vs offre initiale</div>
-                    <div className="text-xl font-bold text-green-700">+{formatEuro(dossier.montant_obtenu - dossier.offre_assureur)}</div>
+              )}
+
+              <div className="card">
+                <h3 className="font-semibold mb-4">Honoraires</h3>
+                <div className="grid grid-cols-3 gap-4">
+                  <Info label="Taux honoraires résultat" value={`${dossier.taux_honoraires_resultat || 0}%`} />
+                  {dossier.honoraires_fixes && <Info label="Honoraires fixes" value={formatEuro(dossier.honoraires_fixes)} />}
+                  {dossier.honoraires_resultat && <Info label="Honoraires résultat" value={formatEuro(dossier.honoraires_resultat)} />}
+                </div>
+              </div>
+
+              {dossier.montant_obtenu && dossier.taux_honoraires_resultat && (
+                <div className="card bg-green-50 border border-green-100">
+                  <div className="grid grid-cols-2 gap-4 text-center">
+                    <div>
+                      <div className="text-xs text-gray-500 mb-1">Honoraires calculés</div>
+                      <div className="text-2xl font-bold text-green-700">
+                        {formatEuro(dossier.montant_obtenu * (dossier.taux_honoraires_resultat / 100))}
+                      </div>
+                      <div className="text-xs text-gray-400 mt-1">({dossier.taux_honoraires_resultat}% × {formatEuro(dossier.montant_obtenu)})</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-gray-500 mb-1">Net client estimé</div>
+                      <div className="text-2xl font-bold text-blue-700">
+                        {formatEuro(dossier.montant_obtenu - (dossier.montant_obtenu * (dossier.taux_honoraires_resultat / 100)))}
+                      </div>
+                    </div>
                   </div>
-                )}
-                {dossier.montant_obtenu && dossier.montant_reclame && (
-                  <div>
-                    <div className="text-xs text-gray-500 mb-1">Taux d'obtention</div>
-                    <div className="text-xl font-bold text-purple-700">{Math.round(dossier.montant_obtenu / dossier.montant_reclame * 100)}%</div>
-                  </div>
-                )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
+      {/* Onglet Notes + Relances */}
+      {tab === 'notes' && (
+        <div className="space-y-4">
+          {/* Sélecteur mode */}
+          <div className="flex gap-2 border-b border-gray-100 pb-3">
+            <button onClick={() => setNoteMode('note')} className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${noteMode === 'note' ? 'bg-cabinet-blue text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+              ✏️ Note interne
+            </button>
+            <button onClick={() => setNoteMode('relance')} className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${noteMode === 'relance' ? 'bg-cabinet-blue text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+              📞 Enregistrer une relance
+            </button>
+          </div>
+
+          {/* Formulaire note */}
+          {noteMode === 'note' && (
+            <div className="card">
+              <textarea value={noteTexte} onChange={e => setNoteTexte(e.target.value)}
+                placeholder="Saisir une note, observation, action à suivre..."
+                className="w-full border border-gray-200 rounded-lg p-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-cabinet-blue/20" rows={3} />
+              <div className="flex justify-end mt-2">
+                <button onClick={ajouterNote} disabled={savingNote || !noteTexte.trim()} className="btn-primary flex items-center gap-2 text-sm">
+                  <Save size={14} /> {savingNote ? 'Enregistrement...' : 'Ajouter'}
+                </button>
               </div>
             </div>
           )}
 
-          <div className="card">
-            <h3 className="font-semibold mb-4">Honoraires</h3>
-            <div className="grid grid-cols-3 gap-4">
-              <Info label="Taux honoraires résultat" value={`${dossier.taux_honoraires_resultat}%`} />
-              {dossier.honoraires_fixes && <Info label="Honoraires fixes" value={formatEuro(dossier.honoraires_fixes)} />}
-              {dossier.honoraires_resultat && <Info label="Honoraires résultat" value={formatEuro(dossier.honoraires_resultat)} />}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Onglet Notes */}
-      {tab === 'notes' && (
-        <div className="space-y-4">
-          <div className="card">
-            <h3 className="font-semibold mb-3 text-sm">Ajouter une note</h3>
-            <textarea
-              value={noteTexte}
-              onChange={e => setNoteTexte(e.target.value)}
-              placeholder="Saisir une note, action, ou alerte..."
-              className="w-full border border-gray-200 rounded-lg p-3 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-cabinet-blue/20"
-              rows={3}
-            />
-            <div className="flex justify-end mt-2">
-              <button onClick={ajouterNote} disabled={savingNote || !noteTexte.trim()} className="btn-primary flex items-center gap-2 text-sm">
-                <Save size={14} /> {savingNote ? 'Enregistrement...' : 'Ajouter la note'}
-              </button>
-            </div>
-          </div>
-
-          {notes.length === 0 ? (
-            <div className="card text-center py-12 text-gray-400">
-              <FileText size={40} className="mx-auto mb-3 opacity-20" />
-              <p>Aucune note pour ce dossier</p>
-            </div>
-          ) : notes.map(n => (
-            <div key={n.id} className="card border-l-4 border-gray-200">
-              <div className="flex items-start justify-between">
-                <p className="text-sm text-gray-700 flex-1">{n.contenu}</p>
+          {/* Formulaire relance */}
+          {noteMode === 'relance' && (
+            <div className="card">
+              <div className="grid grid-cols-3 gap-4 mb-4">
+                <div>
+                  <label className="text-xs text-gray-500 font-medium block mb-1">Type de contact</label>
+                  <select value={relanceForm.type} onChange={e => setRelanceForm(f => ({ ...f, type: e.target.value }))} className="input-field">
+                    {[['telephone','📞 Téléphone'],['whatsapp','💬 WhatsApp'],['email','📧 Email'],['courrier','📬 Courrier'],['sms','💬 SMS']].map(([v,l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 font-medium block mb-1">Statut</label>
+                  <select value={relanceForm.statut} onChange={e => setRelanceForm(f => ({ ...f, statut: e.target.value }))} className="input-field">
+                    {[['envoye','✅ Envoyé / Effectué'],['en_attente','⏳ En attente'],['echec','❌ Échec / Pas de réponse']].map(([v,l]) => <option key={v} value={v}>{l}</option>)}
+                  </select>
+                </div>
+                <div className="col-span-1">
+                  <label className="text-xs text-gray-500 font-medium block mb-1">Motif / Résumé *</label>
+                  <input value={relanceForm.motif} onChange={e => setRelanceForm(f => ({ ...f, motif: e.target.value }))}
+                    className="input-field" placeholder="Ex: Appel pour suivi offre assureur..." />
+                </div>
               </div>
-              <div className="text-xs text-gray-400 mt-2">
-                {new Date(n.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                {n.auteur && ` • ${n.auteur.prenom} ${n.auteur.nom}`}
+              <div className="flex justify-end">
+                <button onClick={ajouterRelance} disabled={savingRelance || !relanceForm.motif.trim()} className="btn-primary flex items-center gap-2 text-sm">
+                  <Save size={14} /> {savingRelance ? 'Enregistrement...' : 'Enregistrer la relance'}
+                </button>
               </div>
             </div>
-          ))}
+          )}
+
+          {/* Fil chronologique : notes + relances mélangées */}
+          {(() => {
+            const tous = [
+              ...notes.map(n => ({ ...n, _kind: 'note' as const })),
+              ...relances.map(r => ({ ...r, _kind: 'relance' as const })),
+            ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+
+            if (tous.length === 0) return (
+              <div className="card text-center py-12 text-gray-400">
+                <FileText size={40} className="mx-auto mb-3 opacity-20" />
+                <p>Aucune note ni relance pour ce dossier</p>
+              </div>
+            )
+
+            return tous.map(item => item._kind === 'note' ? (
+              <div key={`note-${item.id}`} className="card border-l-4 border-gray-200">
+                <div className="flex items-start gap-2">
+                  <span className="text-gray-300 mt-0.5">✏️</span>
+                  <p className="text-sm text-gray-700 flex-1 whitespace-pre-wrap">{item.contenu}</p>
+                </div>
+                <div className="text-xs text-gray-400 mt-2">
+                  {new Date(item.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  {item.auteur && ` • ${item.auteur.prenom} ${item.auteur.nom}`}
+                </div>
+              </div>
+            ) : (
+              <div key={`relance-${item.id}`} className={`card border-l-4 ${item.statut === 'envoye' ? 'border-green-400' : item.statut === 'echec' ? 'border-red-300' : 'border-orange-300'}`}>
+                <div className="flex items-start justify-between">
+                  <div className="flex items-start gap-2">
+                    <span className="text-sm">{item.type === 'telephone' ? '📞' : item.type === 'whatsapp' ? '💬' : item.type === 'email' ? '📧' : '📬'}</span>
+                    <p className="text-sm text-gray-700 flex-1">{item.motif}</p>
+                  </div>
+                  <span className={`badge text-xs ml-2 flex-shrink-0 ${item.statut === 'envoye' ? 'bg-green-100 text-green-700' : item.statut === 'echec' ? 'bg-red-100 text-red-600' : 'bg-orange-100 text-orange-600'}`}>
+                    {item.statut === 'envoye' ? '✓ Effectué' : item.statut === 'echec' ? '✗ Échec' : '⏳ En attente'}
+                  </span>
+                </div>
+                <div className="text-xs text-gray-400 mt-2">
+                  Relance {item.type} • {new Date(item.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                </div>
+              </div>
+            ))
+          })()}
         </div>
       )}
 
