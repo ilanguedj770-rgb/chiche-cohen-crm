@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
 import { Settings, Users, Building, Plus, Edit2, Save, X, Check, Shield, Mail } from 'lucide-react'
 
-type Onglet = 'utilisateurs' | 'cabinet'
+type Onglet = 'utilisateurs' | 'cabinet' | 'email'
 
 const ROLE_LABELS: Record<string, string> = { admin: 'Administrateur', juriste: 'Juriste', avocat: 'Avocat', secretaire: 'Secrétaire', stagiaire: 'Stagiaire' }
 const ROLE_COULEURS: Record<string, string> = { admin: 'bg-red-100 text-red-700', juriste: 'bg-blue-100 text-blue-700', avocat: 'bg-purple-100 text-purple-700', secretaire: 'bg-green-100 text-green-700', stagiaire: 'bg-gray-100 text-gray-600' }
@@ -87,7 +87,7 @@ export default function ParametresPage() {
 
       {/* Onglets */}
       <div className="flex gap-2 mb-8 border-b border-gray-200">
-        {([['utilisateurs', 'Utilisateurs', <Users size={15} />], ['cabinet', 'Cabinet', <Building size={15} />]] as [Onglet, string, any][]).map(([v, l, icon]) => (
+        {([['utilisateurs', 'Utilisateurs', <Users size={15} />], ['cabinet', 'Cabinet', <Building size={15} />], ['email', 'Email Gmail', <Mail size={15} />]] as [Onglet, string, any][]).map(([v, l, icon]) => (
           <button key={v} onClick={() => setOnglet(v)}
             className={`flex items-center gap-2 px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${onglet === v ? 'border-cabinet-blue text-cabinet-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
             {icon} {l}
@@ -261,6 +261,104 @@ export default function ParametresPage() {
           )}
         </div>
       )}
+
+      {/* Onglet Email */}
+      {onglet === 'email' && (
+        <EmailGmailTab />
+      )}
+    </div>
+  )
+}
+
+function EmailGmailTab() {
+  const [config, setConfig] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [disconnecting, setDisconnecting] = useState(false)
+  const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
+  const success = searchParams?.get('success')
+  const error = searchParams?.get('error')
+
+  useEffect(() => {
+    supabase.from('cabinet_config').select('gmail_connected, email').limit(1).single()
+      .then(({ data }) => { setConfig(data); setLoading(false) })
+  }, [])
+
+  async function disconnect() {
+    setDisconnecting(true)
+    await supabase.from('cabinet_config').update({ gmail_connected: false, gmail_access_token: null, gmail_refresh_token: null, gmail_history_id: null }).eq('id', config?.id)
+    setConfig((p: any) => ({ ...p, gmail_connected: false }))
+    setDisconnecting(false)
+  }
+
+  function connect() {
+    const params = new URLSearchParams({
+      client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '',
+      redirect_uri: `${window.location.origin}/api/auth/gmail/callback`,
+      response_type: 'code',
+      scope: 'https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.modify',
+      access_type: 'offline',
+      prompt: 'consent',
+    })
+    window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params}`
+  }
+
+  if (loading) return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cabinet-blue" /></div>
+
+  return (
+    <div className="max-w-xl">
+      <h2 className="text-lg font-bold text-gray-900 mb-1">Connexion Gmail</h2>
+      <p className="text-sm text-gray-500 mb-6">Connectez la boîte <strong>contact@ig-avocat.com</strong> pour envoyer des emails depuis le CRM et recevoir les réponses rattachées aux dossiers.</p>
+
+      {success === 'connected' && (
+        <div className="bg-green-50 border border-green-200 text-green-700 rounded-xl p-4 mb-4 flex items-center gap-2">
+          <Check size={16} /> Gmail connecté avec succès
+        </div>
+      )}
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-4 mb-4">
+          Erreur de connexion Gmail. Réessayez.
+        </div>
+      )}
+
+      <div className="card p-6">
+        {config?.gmail_connected ? (
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
+                <Check size={20} className="text-green-600" />
+              </div>
+              <div>
+                <div className="font-semibold text-gray-900">Gmail connecté</div>
+                <div className="text-sm text-gray-500">{config.email || 'contact@ig-avocat.com'}</div>
+              </div>
+            </div>
+            <div className="border-t border-gray-100 pt-4 space-y-2 text-sm text-gray-600">
+              <div className="flex items-center gap-2"><Check size={14} className="text-green-500" /> Envoi d'emails depuis le CRM</div>
+              <div className="flex items-center gap-2"><Check size={14} className="text-green-500" /> Rappels automatiques (expertises, audiences)</div>
+              <div className="flex items-center gap-2"><Check size={14} className="text-green-500" /> Réception et rattachement aux dossiers</div>
+            </div>
+            <button onClick={disconnect} disabled={disconnecting} className="text-sm text-red-500 hover:text-red-700 transition-colors">
+              {disconnecting ? 'Déconnexion...' : 'Déconnecter Gmail'}
+            </button>
+          </div>
+        ) : (
+          <div className="text-center py-4">
+            <Mail size={40} className="mx-auto mb-3 text-gray-300" />
+            <p className="text-gray-600 mb-4">Gmail non connecté</p>
+            <button onClick={connect} className="btn-primary flex items-center gap-2 mx-auto">
+              <Mail size={15} /> Connecter contact@ig-avocat.com
+            </button>
+          </div>
+        )}
+      </div>
+
+      <div className="mt-6 p-4 bg-blue-50 rounded-xl text-sm text-blue-700">
+        <strong>Rappels automatiques actifs :</strong>
+        <ul className="mt-2 space-y-1 text-blue-600">
+          <li>• Expertise médicale : rappel J-7 et J-2 au client</li>
+          <li>• Audience : rappel J-15 et J-2 à l'avocat</li>
+        </ul>
+      </div>
     </div>
   )
 }
