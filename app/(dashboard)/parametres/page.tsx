@@ -280,7 +280,10 @@ function EmailGmailTab() {
 
   useEffect(() => {
     supabase.from('cabinet_config').select('gmail_connected, email').limit(1).single()
-      .then(({ data }) => { setConfig(data); setLoading(false) })
+      .then(({ data, error }) => {
+        setConfig(data || { gmail_connected: false })
+        setLoading(false)
+      })
   }, [])
 
   async function disconnect() {
@@ -304,6 +307,8 @@ function EmailGmailTab() {
 
   if (loading) return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cabinet-blue" /></div>
 
+  // Si pas de config cabinet du tout, on affiche quand même le bouton connecter
+
   return (
     <div className="max-w-xl">
       <h2 className="text-lg font-bold text-gray-900 mb-1">Connexion Gmail</h2>
@@ -321,7 +326,7 @@ function EmailGmailTab() {
       )}
 
       <div className="card p-6">
-        {config?.gmail_connected ? (
+        {config?.gmail_connected === true ? (
           <div className="space-y-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-green-100 flex items-center justify-center">
