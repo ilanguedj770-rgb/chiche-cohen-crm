@@ -274,28 +274,34 @@ function EmailGmailTab() {
   const [config, setConfig] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [disconnecting, setDisconnecting] = useState(false)
-  const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null
-  const success = searchParams?.get('success')
-  const error = searchParams?.get('error')
+  const [successMsg, setSuccessMsg] = useState('')
+  const [errorMsg, setErrorMsg] = useState('')
 
   useEffect(() => {
-    supabase.from('cabinet_config').select('gmail_connected, email').limit(1).single()
-      .then(({ data, error }) => {
-        setConfig(data || { gmail_connected: false })
+    // Lire les params URL
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('success') === 'connected') setSuccessMsg('Gmail connecté avec succès !')
+    if (params.get('error')) setErrorMsg('Erreur de connexion Gmail. Réessayez.')
+    // Charger config
+    supabase.from('cabinet_config').select('*').limit(1).single()
+      .then(({ data }) => {
+        setConfig(data ?? { gmail_connected: false })
+        setLoading(false)
+      })
+      .catch(() => {
+        setConfig({ gmail_connected: false })
         setLoading(false)
       })
   }, [])
 
-  async function disconnect() {
-    setDisconnecting(true)
-    await supabase.from('cabinet_config').update({ gmail_connected: false, gmail_access_token: null, gmail_refresh_token: null, gmail_history_id: null }).eq('id', config?.id)
-    setConfig((p: any) => ({ ...p, gmail_connected: false }))
-    setDisconnecting(false)
-  }
-
   function connect() {
+    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID
+    if (!clientId) {
+      alert('Variable NEXT_PUBLIC_GOOGLE_CLIENT_ID manquante dans Vercel')
+      return
+    }
     const params = new URLSearchParams({
-      client_id: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || '',
+      client_id: clientId,
       redirect_uri: `${window.location.origin}/api/auth/gmail/callback`,
       response_type: 'code',
       scope: 'https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.readonly https://www.googleapis.com/auth/gmail.modify',
@@ -305,23 +311,39 @@ function EmailGmailTab() {
     window.location.href = `https://accounts.google.com/o/oauth2/v2/auth?${params}`
   }
 
-  if (loading) return <div className="flex justify-center py-12"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cabinet-blue" /></div>
+  async function disconnect() {
+    setDisconnecting(true)
+    await supabase.from('cabinet_config').update({
+      gmail_connected: false,
+      gmail_access_token: null,
+      gmail_refresh_token: null,
+      gmail_history_id: null,
+    }).eq('id', config?.id)
+    setConfig((p: any) => ({ ...p, gmail_connected: false }))
+    setDisconnecting(false)
+  }
 
-  // Si pas de config cabinet du tout, on affiche quand même le bouton connecter
+  if (loading) return (
+    <div className="flex justify-center py-12">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cabinet-blue" />
+    </div>
+  )
 
   return (
     <div className="max-w-xl">
       <h2 className="text-lg font-bold text-gray-900 mb-1">Connexion Gmail</h2>
-      <p className="text-sm text-gray-500 mb-6">Connectez la boîte <strong>contact@ig-avocat.com</strong> pour envoyer des emails depuis le CRM et recevoir les réponses rattachées aux dossiers.</p>
+      <p className="text-sm text-gray-500 mb-6">
+        Connectez la boîte <strong>contact@ig-avocat.com</strong> pour envoyer des emails depuis le CRM.
+      </p>
 
-      {success === 'connected' && (
+      {successMsg && (
         <div className="bg-green-50 border border-green-200 text-green-700 rounded-xl p-4 mb-4 flex items-center gap-2">
-          <Check size={16} /> Gmail connecté avec succès
+          <Check size={16} /> {successMsg}
         </div>
       )}
-      {error && (
+      {errorMsg && (
         <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-4 mb-4">
-          Erreur de connexion Gmail. Réessayez.
+          {errorMsg}
         </div>
       )}
 
@@ -334,7 +356,7 @@ function EmailGmailTab() {
               </div>
               <div>
                 <div className="font-semibold text-gray-900">Gmail connecté</div>
-                <div className="text-sm text-gray-500">{config.email || 'contact@ig-avocat.com'}</div>
+                <div className="text-sm text-gray-500">contact@ig-avocat.com</div>
               </div>
             </div>
             <div className="border-t border-gray-100 pt-4 space-y-2 text-sm text-gray-600">
