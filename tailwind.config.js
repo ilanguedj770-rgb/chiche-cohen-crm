@@ -8,9 +8,9 @@ module.exports = {
     extend: {
       colors: {
         cabinet: {
-          blue: '#1B3A6B',
-          'blue-light': '#D6E4F0',
-          'blue-mid': '#2E5FA3',
+          blue: '#CC0000',
+          'blue-light': '#FFD6D6',
+          'blue-mid': '#FF3333',
         }
       }
     },
