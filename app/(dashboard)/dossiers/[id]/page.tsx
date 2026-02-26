@@ -4,6 +4,7 @@ import { supabase } from '@/lib/supabase'
 import { ETAPES_LABELS, ETAPES_COULEURS, TYPE_ACCIDENT_LABELS, type Dossier, type Client, type Etape, type Expertise, type Audience } from '@/lib/types'
 import { ArrowLeft, Download, Phone, Mail, Calendar, Scale, Stethoscope, Euro, ChevronRight, Plus, Save, AlertTriangle, FileText, Clock, Gavel, User, Upload, Trash2, Edit2, X, CheckSquare, Check } from 'lucide-react'
 import Link from 'next/link'
+import ComposeModal from '@/components/emails/ComposeModal'
 import { exportDossierPDF } from '@/lib/export-pdf'
 import { useParams } from 'next/navigation'
 
@@ -37,7 +38,9 @@ export default function DossierDetail() {
   const [cabinet, setCabinet] = useState<any>(null)
   const [documents, setDocuments] = useState<any[]>([])
   const [uploading, setUploading] = useState(false)
-  const [tab, setTab] = useState<'detail' | 'procedure' | 'expertises' | 'audiences' | 'financier' | 'notes' | 'taches' | 'historique' | 'documents'>('detail')
+  const [tab, setTab] = useState<'detail' | 'procedure' | 'expertises' | 'audiences' | 'financier' | 'notes' | 'taches' | 'historique' | 'documents' | 'emails'>('detail')
+  const [showCompose, setShowCompose] = useState(false)
+  const [emailCount, setEmailCount] = useState(0)
   const [loading, setLoading] = useState(true)
   const [noteTexte, setNoteTexte] = useState('')
   const [savingNote, setSavingNote] = useState(false)
@@ -294,6 +297,7 @@ export default function DossierDetail() {
           ['taches', 'Tâches'],
           ['historique', 'Timeline'],
           ['documents', `Documents (${documents.length})`],
+          ['emails', `Emails (${emailCount})`],
         ].map(([t, label]) => (
           <button key={t} onClick={() => setTab(t as any)}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${tab === t ? 'border-cabinet-blue text-cabinet-blue' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
@@ -949,6 +953,15 @@ export default function DossierDetail() {
           }}
         />
       )}
+      {tab === 'emails' && (
+        <DossierEmailsTab
+          dossierId={id as string}
+          dossier={dossier}
+          client={client}
+          onCompose={() => setShowCompose(true)}
+        />
+      )}
+
       {tab === 'historique' && (
         <TimelineDossier
           historique={historique}
@@ -1219,6 +1232,13 @@ function TimelineDossier({ historique, relances, audiences, expertises, document
   })
 
   // Relances
+  useEffect(() => {
+    if (dossier?.id) {
+      supabase.from('emails').select('id', { count: 'exact', head: true }).eq('dossier_id', dossier.id)
+        .then(({ count }) => setEmailCount(count || 0))
+    }
+  }, [dossier?.id])
+
   const RELANCE_TYPE_ICONS: Record<string, string> = { telephone: '📞', whatsapp: '💬', email: '📧', courrier: '✉️', sms: '📱' }
   const RELANCE_STATUT_COLORS: Record<string, string> = { effectuee: 'text-green-700', en_attente: 'text-orange-700', annulee: 'text-gray-500' }
   const RELANCE_STATUT_BG: Record<string, string> = { effectuee: 'bg-green-50', en_attente: 'bg-orange-50', annulee: 'bg-gray-50' }
@@ -1320,6 +1340,122 @@ function TimelineDossier({ historique, relances, audiences, expertises, document
           </div>
         </div>
       ))}
+    </div>
+  )
+}
+
+function DossierEmailsTab({ dossierId, dossier, client, onCompose }: { dossierId: string; dossier: any; client: any; onCompose: () => void }) {
+  const [emails, setEmails] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [selected, setSelected] = useState<any>(null)
+  const [showCompose, setShowCompose] = useState(false)
+  const [rattaching, setRattaching] = useState(false)
+
+  useEffect(() => { loadEmails() }, [dossierId])
+
+  async function loadEmails() {
+    setLoading(true)
+    const { data } = await supabase.from('emails').select('*').eq('dossier_id', dossierId).order('sent_at', { ascending: false })
+    if (data) setEmails(data)
+    setLoading(false)
+  }
+
+  async function markRead(email: any) {
+    if (!email.lu && email.direction === 'received') {
+      await supabase.from('emails').update({ lu: true }).eq('id', email.id)
+      setEmails(p => p.map(e => e.id === email.id ? { ...e, lu: true } : e))
+    }
+    setSelected(email)
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+          <Mail size={16} className="text-cabinet-blue" /> Emails du dossier
+        </h3>
+        <button onClick={() => setShowCompose(true)} className="btn-primary text-sm flex items-center gap-2">
+          <Plus size={14} /> Envoyer un email
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-8"><div className="animate-spin rounded-full h-6 w-6 border-b-2 border-cabinet-blue" /></div>
+      ) : emails.length === 0 ? (
+        <div className="card p-12 text-center text-gray-400">
+          <Mail size={32} className="mx-auto mb-3 opacity-30" />
+          <p className="text-sm mb-4">Aucun email pour ce dossier</p>
+          <button onClick={() => setShowCompose(true)} className="btn-primary text-sm flex items-center gap-2 mx-auto">
+            <Plus size={14} /> Envoyer le premier email
+          </button>
+        </div>
+      ) : (
+        <div className="grid grid-cols-3 gap-4">
+          {/* Liste */}
+          <div className="card overflow-hidden">
+            <div className="divide-y divide-gray-50">
+              {emails.map(email => (
+                <button key={email.id} onClick={() => markRead(email)}
+                  className={`w-full text-left p-3 hover:bg-blue-50/50 transition-colors ${selected?.id === email.id ? 'bg-blue-50' : ''} ${email.direction === 'received' && !email.lu ? 'bg-blue-50/30' : ''}`}>
+                  <div className="flex items-start gap-2">
+                    <span className={`text-xs mt-0.5 ${email.direction === 'sent' ? 'text-blue-400' : 'text-green-400'}`}>
+                      {email.direction === 'sent' ? '↑' : '↓'}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <div className={`text-xs truncate ${email.direction === 'received' && !email.lu ? 'font-bold' : 'font-medium text-gray-700'}`}>
+                        {email.direction === 'sent' ? `→ ${email.to_email}` : email.from_email.replace(/<.*>/, '').trim()}
+                      </div>
+                      <div className="text-xs text-gray-500 truncate mt-0.5">{email.subject}</div>
+                      <div className="text-xs text-gray-400 mt-0.5">{new Date(email.sent_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}</div>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Détail */}
+          <div className="col-span-2">
+            {selected ? (
+              <div className="card p-4">
+                <div className="flex items-start justify-between mb-3">
+                  <div>
+                    <h4 className="font-semibold text-gray-900">{selected.subject}</h4>
+                    <div className="text-xs text-gray-500 mt-1 space-y-0.5">
+                      <div>De : {selected.from_email}</div>
+                      <div>À : {selected.to_email}</div>
+                      <div>{new Date(selected.sent_at).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' })}</div>
+                    </div>
+                  </div>
+                  {selected.direction === 'received' && (
+                    <button onClick={() => setShowCompose(true)} className="btn-primary text-xs py-1.5 px-3 flex items-center gap-1">
+                      Répondre
+                    </button>
+                  )}
+                </div>
+                <div className="border-t border-gray-100 pt-3">
+                  <pre className="text-sm text-gray-800 whitespace-pre-wrap font-sans leading-relaxed">{selected.body_preview}</pre>
+                </div>
+              </div>
+            ) : (
+              <div className="card p-8 text-center text-gray-300">
+                <Mail size={32} className="mx-auto mb-2 opacity-30" />
+                <p className="text-sm">Sélectionnez un email</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {showCompose && (
+        <ComposeModal
+          onClose={() => setShowCompose(false)}
+          onSent={() => { setShowCompose(false); loadEmails() }}
+          dossier={dossier}
+          client={client}
+          replyTo={selected?.direction === 'received' ? selected : undefined}
+        />
+      )}
     </div>
   )
 }
