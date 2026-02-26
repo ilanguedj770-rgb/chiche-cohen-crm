@@ -108,7 +108,7 @@ export const WORKFLOW_RULES: WorkflowRule[] = [
   // ─────────────────────────────────────────────────────────────────────────
   {
     id: 'constitution_expertise',
-    nom: 'Préparation de l'expertise médicale',
+    nom: "Préparation de l'expertise médicale",
     description: "Planifier l'expertise amiable et désigner le médecin conseil",
     etape_source: 'constitution_dossier',
     etape_cible: 'expertise_amiable',
@@ -146,8 +146,8 @@ export const WORKFLOW_RULES: WorkflowRule[] = [
   // ─────────────────────────────────────────────────────────────────────────
   {
     id: 'expertise_offre',
-    nom: 'Analyse et chiffrage de l'offre',
-    description: 'Analyser le rapport d'expertise et préparer le chiffrage Dintilhac',
+    nom: "Analyse et chiffrage de l'offre",
+    description: "Analyser le rapport d'expertise et préparer le chiffrage Dintilhac",
     etape_source: 'expertise_amiable',
     etape_cible: 'offre_assureur',
     actif: true,
@@ -170,7 +170,7 @@ export const WORKFLOW_RULES: WorkflowRule[] = [
       },
       {
         type: 'creer_tache',
-        titre: 'Informer le client des résultats de l'expertise',
+        titre: "Informer le client des résultats de l'expertise",
         description: "Expliquer au client le contenu du rapport et la stratégie d'indemnisation",
         priorite: 'normale',
         delai_jours: 7,
@@ -184,7 +184,7 @@ export const WORKFLOW_RULES: WorkflowRule[] = [
   // ─────────────────────────────────────────────────────────────────────────
   {
     id: 'offre_negociation',
-    nom: 'Contestation de l'offre et contre-proposition',
+    nom: "Contestation de l'offre et contre-proposition",
     description: "Préparer et envoyer la contestation de l'offre insuffisante",
     etape_source: 'offre_assureur',
     etape_cible: 'negociation',
@@ -258,7 +258,7 @@ export const WORKFLOW_RULES: WorkflowRule[] = [
   // ─────────────────────────────────────────────────────────────────────────
   {
     id: 'negociation_transaction_amiable',
-    nom: 'Finalisation du protocole transactionnel',
+    nom: "Finalisation du protocole transactionnel",
     description: 'Rédiger et faire signer le protocole de transaction amiable',
     etape_source: 'negociation',
     etape_cible: 'transaction',

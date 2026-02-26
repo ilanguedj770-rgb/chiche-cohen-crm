@@ -331,12 +331,12 @@ export default function AutomatisationsPage() {
       .limit(30)
 
     if (data && data.length > 0) {
-      const dossierIds = [...new Set(data.map((n) => n.dossier_id))]
+      const dossierIds = Array.from(new Set(data.map((n) => n.dossier_id)))
       const { data: dossiers } = await supabase
         .from('dossiers')
         .select('id, reference, client_id')
         .in('id', dossierIds)
-      const clientIds = dossiers ? [...new Set(dossiers.map((d: any) => d.client_id))] : []
+      const clientIds = dossiers ? Array.from(new Set(dossiers.map((d: any) => d.client_id))) : []
       const { data: clients } = clientIds.length
         ? await supabase.from('clients').select('id, nom, prenom').in('id', clientIds)
         : { data: [] }

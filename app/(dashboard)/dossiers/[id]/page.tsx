@@ -103,6 +103,13 @@ export default function DossierDetail() {
     load()
   }, [id])
 
+  useEffect(() => {
+    if (dossier?.id) {
+      supabase.from('emails').select('id', { count: 'exact', head: true }).eq('dossier_id', dossier.id)
+        .then(({ count }) => setEmailCount(count || 0))
+    }
+  }, [dossier?.id])
+
   const ajouterExpertise = async () => {
     setSavingExpertise(true)
     const dt = expertiseForm.heure ? `${expertiseForm.date_expertise}T${expertiseForm.heure}:00` : expertiseForm.date_expertise
@@ -1275,13 +1282,6 @@ function TimelineDossier({ historique, relances, audiences, expertises, document
   })
 
   // Relances
-  useEffect(() => {
-    if (dossier?.id) {
-      supabase.from('emails').select('id', { count: 'exact', head: true }).eq('dossier_id', dossier.id)
-        .then(({ count }) => setEmailCount(count || 0))
-    }
-  }, [dossier?.id])
-
   const RELANCE_TYPE_ICONS: Record<string, string> = { telephone: '📞', whatsapp: '💬', email: '📧', courrier: '✉️', sms: '📱' }
   const RELANCE_STATUT_COLORS: Record<string, string> = { effectuee: 'text-green-700', en_attente: 'text-orange-700', annulee: 'text-gray-500' }
   const RELANCE_STATUT_BG: Record<string, string> = { effectuee: 'bg-green-50', en_attente: 'bg-orange-50', annulee: 'bg-gray-50' }

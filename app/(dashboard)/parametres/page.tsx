@@ -284,12 +284,12 @@ function EmailGmailTab() {
     if (params.get('error')) setErrorMsg('Erreur de connexion Gmail. Réessayez.')
     // Charger config
     supabase.from('cabinet_config').select('*').limit(1).single()
-      .then(({ data }) => {
-        setConfig(data ?? { gmail_connected: false })
-        setLoading(false)
-      })
-      .catch(() => {
-        setConfig({ gmail_connected: false })
+      .then(({ data, error }) => {
+        if (error) {
+          setConfig({ gmail_connected: false })
+        } else {
+          setConfig(data ?? { gmail_connected: false })
+        }
         setLoading(false)
       })
   }, [])
