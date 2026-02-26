@@ -4,7 +4,7 @@ import { useRouter } from 'next/navigation'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
-import { LayoutDashboard, Search, Settings, FolderOpen, Users, Calendar, Stethoscope, Scale, BarChart3, Bell, Phone, Calculator, Gavel, Briefcase, CheckSquare, FileText, FileSignature } from 'lucide-react'
+import { LayoutDashboard, Search, Settings, FolderOpen, Users, Calendar, Stethoscope, Scale, BarChart3, Bell, Phone, Calculator, Gavel, Briefcase, CheckSquare, FileText, FileSignature, Zap } from 'lucide-react'
 
 export default function Sidebar() {
   const pathname = usePathname()
@@ -50,6 +50,7 @@ export default function Sidebar() {
     { href: '/documents-modeles', label: 'Modèles Word', icon: FileSignature },
     { section: 'Analyse' },
     { href: '/statistiques', label: 'Statistiques', icon: BarChart3 },
+    { href: '/automatisations', label: 'Automatisations', icon: Zap },
     { href: '/parametres', label: 'Paramètres', icon: Settings },
   ]
 
