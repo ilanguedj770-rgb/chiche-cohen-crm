@@ -61,6 +61,7 @@ export default function DossierDetail() {
   const [editingEtape, setEditingEtape] = useState(false)
   const [editFinancier, setEditFinancier] = useState(false)
   const [editProcedure, setEditProcedure] = useState(false)
+  const [workflowToast, setWorkflowToast] = useState<string | null>(null)
   const [procForm, setProcForm] = useState<any>({})
   const [savingProc, setSavingProc] = useState(false)
   const [showNouvelleProc, setShowNouvelleProc] = useState(false)
@@ -199,6 +200,42 @@ export default function DossierDetail() {
       await supabase.from('historique_etapes').insert({ dossier_id: id, etape_precedente: etapePrecedente, etape_nouvelle: nouvelleEtape })
       const { data: h } = await supabase.from('historique_etapes').select('*, utilisateur:utilisateurs(nom, prenom)').eq('dossier_id', id).order('created_at', { ascending: false })
       if (h) setHistorique(h)
+
+      // Déclencher les automatisations de workflow
+      try {
+        const res = await fetch('/api/workflow/trigger', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            dossier_id: id,
+            etape_source: etapePrecedente,
+            etape_cible: nouvelleEtape,
+            dossier: {
+              juriste_id: data.juriste_id,
+              avocat_id: data.avocat_id,
+              client_id: data.client_id,
+              voie: data.voie,
+              reference: data.reference,
+            },
+          }),
+        })
+        const result = await res.json()
+        if (result.actions_executees > 0) {
+          // Recharger les tâches et les notes
+          const [{ data: tachesData }, { data: notesData }] = await Promise.all([
+            supabase.from('taches').select('*, assignee:utilisateurs(nom, prenom)').eq('dossier_id', id).order('date_echeance', { ascending: true, nullsFirst: false }),
+            supabase.from('notes').select('*, auteur:utilisateurs(nom, prenom)').eq('dossier_id', id).order('created_at', { ascending: false }),
+          ])
+          if (tachesData) setTaches(tachesData)
+          if (notesData) setNotes(notesData)
+
+          const msg = `✅ ${result.actions_executees} action(s) automatique(s) créée(s)`
+          setWorkflowToast(msg)
+          setTimeout(() => setWorkflowToast(null), 4000)
+        }
+      } catch {
+        // Automation non-bloquante — on ignore l'erreur silencieusement
+      }
     }
     setEditingEtape(false)
     setShowEtapeMenu(false)
@@ -224,6 +261,12 @@ export default function DossierDetail() {
 
   return (
     <div className="p-8">
+      {/* Toast automatisation */}
+      {workflowToast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-gray-900 text-white text-sm px-5 py-3 rounded-xl shadow-lg flex items-center gap-2 animate-fade-in">
+          {workflowToast}
+        </div>
+      )}
       {/* Header */}
       <div className="flex items-start justify-between mb-6">
         <div className="flex items-center gap-4">
