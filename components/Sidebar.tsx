@@ -108,7 +108,7 @@ export default function Sidebar() {
 
       {/* Footer */}
       <div className="p-4 border-t border-gray-100">
-        <div className="text-xs text-gray-400 text-center">CRM Cabinet v2.0</div>
+        <div className="text-xs text-center font-bold" style={{color: '#CC0000'}}>⚡ DEPLOY TEST ⚡</div>
       </div>
     </aside>
   )
